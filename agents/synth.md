@@ -38,3 +38,4 @@ A path in `owns` or `symbols`, or a symbol name, tagged `[NEW]` (for example `"[
 5. When `tests` is `[]`, never run the barrier. Run the `acceptance` command once after editing and report it in `checks`.
 6. Never run the barrier with `--full`, the dependency-changing commands the project's AGENTS.md forbids, formatters, or state-changing git commands.
 7. When the coordinator messages you a failed gate or review findings, apply exactly the requested fix inside `owns`, rerun rule 4 or 5, and yield the same schema again. When it messages a corrected slice spec after a SPEC_CONFLICT, rerun the Turn 1 Protocol on that spec first.
+8. Read only skills that your task text or the project's AGENTS.md names for your owned files. Never read skill://plan-preflight, skill://parallel-fanout, skill://adversarial-review, or skill://graphify: the coordinator owns planning, fan-out, and review, and your `owns`/`reads` replace codebase exploration.

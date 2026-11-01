@@ -20,6 +20,7 @@ PRUNED_DIRS = {
     ".git", "node_modules", "dist", "build", ".venv", "venv",
     "__pycache__", ".scratch", ".nx", ".angular", "coverage",
 }
+AUTOSAVED_PLANS_DIR = Path(".omp/plans")
 
 
 def diagnostic(code: str, sid: str | None, line: int | None, detail: str) -> dict[str, Any]:
@@ -191,13 +192,16 @@ def word_pattern(segment: str) -> re.Pattern[str]:
 
 
 def references(root: Path, ident: str) -> set[str]:
+    """Find callers, excluding .omp/plans/ autosave copies at any depth."""
     try:
         result = subprocess.run(
             ["git", "-c", "core.quotepath=off", "-C", str(root), "grep", "-l", "-I", "-w", "-F", "--untracked", "-e", ident],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         if result.returncode in (0, 1):
-            return {normalize_path(path)[1] for path in result.stdout.splitlines()}
+            paths = (normalize_path(path)[1] for path in result.stdout.splitlines())
+            excluded_segment = f"/{AUTOSAVED_PLANS_DIR.as_posix()}/"
+            return {path for path in paths if excluded_segment not in "/" + path}
     except OSError:
         pass
 
@@ -205,6 +209,8 @@ def references(root: Path, ident: str) -> set[str]:
     pattern = word_pattern(ident)
     for directory, dirs, files in os.walk(root):
         dirs[:] = [name for name in dirs if name not in PRUNED_DIRS]
+        if Path(directory).name == AUTOSAVED_PLANS_DIR.parent.name:
+            dirs[:] = [name for name in dirs if name != AUTOSAVED_PLANS_DIR.name]
         for name in files:
             path = Path(directory) / name
             try:

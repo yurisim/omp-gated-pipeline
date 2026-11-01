@@ -1,6 +1,6 @@
 ---
 name: parallel-fanout
-description: "Auto-fan independent work into one parallel task batch without being asked."
+description: "Main-session coordinator only; subagents never load this skill. Auto-fan independent work into one parallel task batch without being asked."
 ---
 
 # parallel-fanout - parallel execution skill
@@ -56,6 +56,8 @@ Barrier: the project's AGENTS.md pipeline section names the command (`<barrier>`
 ## 3. Collect and gate
 
 Keep working while siblings run. Collect with `wait`. Apply every `planDeviations` entry to dependent artifacts before gating.
+
+Progress: mirror the plan's waves in `todo`. Use phases `Wave 0`, `Wave 1` … `Wave N` (one per wave in `## Parallel waves`), then `Integration`. Each slice gets one item named by outcome, `<id>: <what it delivers>` (for example `S2: agent integration`), never by action (`Spawn S2`). Wave 0 items are the contract and spec-test writes that the plan actually has, plus `wave0-red` only when it runs (no item when it is skipped). A JSON-free serial plan has no wave phases: one item for the inline change, then `Integration`. Mark a slice item `done` once its result is collected and its slice gate passes, in the same response as your next tool call. Close every item of a wave before spawning the next wave; never batch-close items at the end of the run.
 
 Spec conflicts: a `synth` that returns a non-empty `specConflict` made no edits. Read each cited `file:line`, then `ask` the user with the `SPEC_CONFLICT` lines and what you found. After the user decides, patch the plan, rerun skill://plan-preflight, and send the corrected slice JSON to the same synth with `write agent://<id>`.
 

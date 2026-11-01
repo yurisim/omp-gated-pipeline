@@ -1,6 +1,6 @@
 ---
 name: plan-preflight
-description: Zero-token deterministic gate for plan files - path/symbol existence and unlisted callers of changed signatures. Run before proposing any plan and before spawning wave 1.
+description: Main-session coordinator only; subagents never load this skill. Zero-token deterministic gate for plan files - path/symbol existence and unlisted callers of changed signatures. Run before proposing any plan and before spawning wave 1.
 ---
 
 # plan-preflight

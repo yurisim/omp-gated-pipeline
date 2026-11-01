@@ -99,6 +99,17 @@ class PreflightTest(unittest.TestCase):
                 code, report = self.run_preflight(plan_text([listed]))
                 self.assertEqual((code, report["diagnostics"]), (0, []))
 
+    def test_autosaved_plan_copies_are_not_callers(self):
+        self.write(".omp/plans/OLD_PLAN.md", "Change `add` to take strings.\n")
+        self.write("pkg/.omp/plans/OLD_PLAN.md", "Change `add` to take strings.\n")
+        changed = {"path": "src/a.ts", "name": "add", "signature": "add(a: string): string", "contract": "c"}
+        for use_git in (False, True):
+            with self.subTest(git=use_git):
+                if use_git:
+                    subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+                code, report = self.run_preflight(plan_text([slice_spec(owns=["src/a.ts"], symbols=[changed])]))
+                self.assertEqual((code, report["verdict"], report["diagnostics"]), (0, "pass", []))
+
     def test_missing_waves_section_and_bad_json_fail(self):
         code, report = self.run_preflight("# Plan\n\n## Context\n\nnothing\n")
         self.assertEqual((code, self.codes(report)), (1, ["BAD_SPEC"]))

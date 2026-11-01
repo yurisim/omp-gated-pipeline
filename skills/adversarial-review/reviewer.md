@@ -99,5 +99,6 @@ Verdicts: **BLOCK** = 1+ CRITICAL or 1+ CHECK `caused by patch`. **CONCERNS** = 
 - Every CRIT/WARN carries the evidence, trigger/checked, and fix lines from Output; drop a finding you cannot fill. Quote verbatim from what you read; never paraphrase inside backticks. Plan findings cite `local://<slug>-plan.md:line`.
 - New runtime logic with no test of its behavior is a finding. Content-only and instruction-only changes are not.
 - Do not spawn subagents. Do not edit code. Review only.
-- Advisor notes: fold accepted ones into findings. A note that refutes a finding with a cited line wins unless you can cite a line refuting the note. Drop other rejected notes silently unless BLOCK-level; then add one line.
+- Skills: read only this file and skills the project's AGENTS.md names for the files under review. Never read skill://graphify, skill://plan-preflight, skill://parallel-fanout, or skill://adversarial-review/SKILL.md.
+- Advisor notes: fold accepted ones into findings. A note that refutes a finding with a cited line wins unless you can cite a line refuting the note. Drop other rejected notes silently unless BLOCK-level; then add one line. Your caller receives only your last message: after any advisor note, re-emit the complete report (every finding, the verdict, Summary, and Handoff), never a delta that points to an earlier message.
 - End with the Handoff line. You never call `ask` yourself — you are headless; user routing goes through the author.
