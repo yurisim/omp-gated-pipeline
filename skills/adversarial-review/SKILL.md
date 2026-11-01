@@ -1,11 +1,14 @@
 ---
 name: adversarial-review
-description: Hostile second-opinion review, scoped to the requested change, by a reviewer on different weights (@slow). Use after drafting code, content, or answers (plans only on explicit user request), before merging, or when a review felt too agreeable.
+description: Hostile second-opinion review, scoped to the requested change, by a reviewer from the model family that did not write the work. Use after drafting code, content, or answers (plans only on explicit user request), before merging, or when a review felt too agreeable.
 ---
 
 # Adversarial Review
 
-A reviewer with different weights breaks self-review blindness. One `adversarial-reviewer` pass on `@slow`, scoped to what the user asked for.
+A reviewer with different weights breaks self-review blindness. Run one review pass, scoped to what the user asked for, with reviewers whose model family did not write the work they review:
+- `adversarial-reviewer` (Opus, Sol advisor) takes the files that only Sol agents wrote (`synth`, or a `task` agent that ran on Sol).
+- `adversarial-reviewer-sol` (Sol, Opus advisor) takes every file the coordinator or any other Opus agent wrote or edited: wave-0 spec tests, inline edits (exempt single-file fixes, JSON-free serial plans, coordinator-owned or audit fixes), text the plan gave `sonic` verbatim, or output of a `task` agent that ran on Opus. Plans and answers are written by the coordinator, so they also take this agent.
+- When both groups are non-empty, spawn both in one `task` batch, each with only its own files under SCOPE `artifacts:` and the same OUTPUT patch; that batch is the one review pass. Handle their findings together.
 
 ## Use / Skip
 
@@ -16,7 +19,7 @@ Skip: typo/format-only; open-ended brainstorming (review the converged proposal)
 
 Reviews drift into surfaces the change never touched (e.g. UI and browser coverage on a content-only plan) when the task names only files. Always pass:
 - **INTENT**: the user's latest request quoted verbatim, then one sentence on what the output must achieve.
-- **SCOPE**: three parts — `artifacts:` files/plan under review (plus untracked files to read whole); `concerns:` what to check, taken from the matching concern profile in the `adversarial-reviewer` agent definition (Scope gate); `exclusions:` surfaces the change does not touch.
+- **SCOPE**: three parts — `artifacts:` files/plan under review (plus untracked files to read whole); `concerns:` what to check, taken from the matching concern profile in skill://adversarial-review/reviewer.md (Scope gate); `exclusions:` surfaces the change does not touch.
 - Never add checklist items for surfaces the change does not touch (UI, browser/e2e coverage, security, production hardening).
 
 Examples:
@@ -39,7 +42,7 @@ The reviewer has only `read`, `grep`, `glob`: no shell, no git, no tests. Hand i
 {
   "context": "Adversarial second-opinion review. OUTPUT is a patch file; INTENT states what it was for.",
   "tasks": [{
-    "agent": "adversarial-reviewer",
+    "agent": "<adversarial-reviewer or adversarial-reviewer-sol, chosen as above>",
     "task": "Review OUTPUT against INTENT. SCOPE: artifacts: <files; untracked files to read whole>; concerns: <from the concern profile>; exclusions: <untouched surfaces>.\nBASE: <resolved 40-hex sha>\nOUTPUT: local://<topic>.patch\nCHECKS: local://<topic>-checks.md\nBASELINE_CHECKS: local://<topic>-baseline-checks.md (or none)\nPLAN_DEVIATIONS: <verbatim list or none>\nKNOWN: <tracked defects and plan-mandated behavior, one per line>\nINTENT: <user request verbatim> — <what it was supposed to achieve>",
     "solutionSpace": "Defect cause open within SCOPE; reviewer reports in-scope breaks only."
   }]
@@ -48,7 +51,7 @@ The reviewer has only `read`, `grep`, `glob`: no shell, no git, no tests. Hand i
 
 Plans (only on explicit user request) and answers: OUTPUT is the plan path or the pasted answer; the patch does not apply, and CHECKS is `none` unless the plan claims pre-existing check failures, in which case `BASE: <resolved 40-hex sha>` and `BASELINE_CHECKS: local://<topic>-baseline-checks.md` are required.
 
-Notes: the agent runs on `@slow` with `advisor: true` (the `advisor` model role, so different weights second-guess each turn) and is read-only (`read`, `grep`, `glob`). Override the advisor via `task.agentAdvisor`.
+Notes: both agents load their instructions from skill://adversarial-review/reviewer.md and are read-only (`read`, `grep`, `glob`). Each pairs with an advisor from the other family that second-guesses every turn: `adversarial-reviewer` runs on `@slow` with `advisor: true` (the `advisor` model role); `adversarial-reviewer-sol` runs on `openai-codex/gpt-6.1-sol:max` with `advisor: "@slow"`. Override either advisor via `task.agentAdvisor`.
 
 ## Verdict (skeptical by default, never auto-fix)
 
@@ -65,7 +68,7 @@ Disagreement never self-clears. Present finding + refutation, call `ask` (fix / 
 
 ## Barrier-gated changes
 
-When skill://parallel-fanout ran the pipeline, the review is the single Opus diff audit after a green integration barrier:
+When skill://parallel-fanout ran the pipeline, the review is the single diff audit after a green integration barrier, by the agent chosen as above:
 - OUTPUT: the `patch` path from the last passing integration barrier JSON (`.scratch/barrier/integrate.patch` or `integrate-retry.patch`). Untracked files from its `untracked` list go in SCOPE to be read whole.
 - CHECKS: that barrier's `.json` and `.txt`, `wave0-red.json` when any slice has spec tests, every slice barrier JSON (or the exact acceptance command and result for `tests: []` or a JSON-free serial plan), plus `git status --short` and `planDeviations` in `local://<topic>-checks.md`. An explicitly recorded `no spec tests; no wave0-red.json` is valid only when every slice has `tests: []` or the plan is JSON-free serial; otherwise missing wave-0 evidence is not valid.
 - SCOPE concerns add: drift between the diff and each slice spec (signatures, invariants, files outside `owns`); tests added or edited by a slice outside its `owns`; passing planned spec tests (including parametrized cases) from `wave0-red.json` `passed_ids`, recorded in `planDeviations` (they test nothing new; ignore unrelated existing tests from those files).

@@ -5,7 +5,7 @@ omp plugin package: plan → deterministic preflight (0 model tokens) → Sol sl
 - `rules/gated-pipeline.md`: always-apply main-session rule (fan-out, plan gate, review cooldown).
 - `skills/plan-preflight/`: `preflight.py` checks plan paths/symbols (`[NEW]` exempt) and unlisted callers of changed signatures.
 - `skills/parallel-fanout/`, `skills/adversarial-review/`: pipeline procedure.
-- `agents/synth.md` (Sol; `SPEC_CONFLICT` gate), `agents/critic.md`, `agents/adversarial-reviewer.md` (Opus with a Sol advisor).
+- `agents/synth.md` (Sol; `SPEC_CONFLICT` gate), `agents/critic.md`, `agents/adversarial-reviewer.md` (Opus with a Sol advisor) and `agents/adversarial-reviewer-sol.md` (Sol with an Opus advisor), both loading `skills/adversarial-review/reviewer.md`.
 
 ## Install
 
