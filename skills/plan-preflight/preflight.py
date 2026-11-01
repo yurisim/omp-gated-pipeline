@@ -315,6 +315,7 @@ def check_anchors(text: str, root: Path) -> tuple[list[dict[str, Any]], int]:
     anchors = 0
     fence_close: re.Pattern[str] | None = None
     repo_files: list[str] | None = None
+    repo_extensions: set[str] | None = None
     file_data: dict[str, tuple[str, int]] = {}
 
     def files() -> list[str]:
@@ -384,7 +385,13 @@ def check_anchors(text: str, root: Path) -> tuple[list[dict[str, Any]], int]:
                 path = normalize_path(anchor[1])[1]
                 candidates = resolve_files(path)
                 if not candidates and "/" not in path:
-                    anchor = None
+                    if repo_extensions is None:
+                        repo_extensions = {
+                            name.rsplit(".", 1)[1].lower() for name in files()
+                            if "." in name.rsplit("/", 1)[-1]
+                        }
+                    if path.rsplit(".", 1)[1].lower() not in repo_extensions:
+                        anchor = None
             if anchor:
                 anchors += 1
                 numbers = [int(number) for number in re.findall(r"[0-9]+", anchor[2])]
@@ -393,6 +400,13 @@ def check_anchors(text: str, root: Path) -> tuple[list[dict[str, Any]], int]:
                     diagnostics.append(diagnostic(
                         "LINE_OUT_OF_RANGE", None, line_number,
                         f"`{value}` names line 0; lines start at 1",
+                    ))
+                    previous_end = span.end()
+                    continue
+                if any(int(start) > int(end) for start, end in re.findall(r"([0-9]+)-([0-9]+)", anchor[2])):
+                    diagnostics.append(diagnostic(
+                        "LINE_OUT_OF_RANGE", None, line_number,
+                        f"`{value}` is a reversed range",
                     ))
                     previous_end = span.end()
                     continue

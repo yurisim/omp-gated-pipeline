@@ -18,7 +18,7 @@ Run from the repository root (stdlib Python 3.10+; no model call):
 | `BAD_SPEC` | no `## Parallel waves` section, no slice arrays under it (unless the section has a `Serial:` line and an `Acceptance:` line, the JSON-free serial form), a JSON-free `Serial:` section with no `Acceptance:` line, invalid JSON in a wave block, a slice missing or mistyping `id`/`agent`/`owns`/`reads`/`symbols`/`invariants`/`tests`/`acceptance`, or a duplicate id |
 | `PATH_MISSING` | an untagged `owns`/`reads`/`symbols[].path` entry, or a serial-plan anchor's file, does not exist |
 | `SYMBOL_MISSING` | a segment of an untagged symbol `name` (split on `.`, `#`, `:`) does not appear as a word in its file, or a symbol written beside a serial-plan anchor is not a word in that file |
-| `LINE_OUT_OF_RANGE` | a serial-plan anchor names line 0, or its highest line number is past the end of its file |
+| `LINE_OUT_OF_RANGE` | a serial-plan anchor names line 0 or a reversed range (`9-2`), or its highest line number is past the end of its file |
 | `UNLISTED_CALLER` | a symbol's `signature` is not in its file verbatim (whitespace-normalized), so the plan changes it, and a file referencing its last name segment (`git grep -w`) is in no slice's `owns`, `reads`, `symbols[].path`, or `tests` file |
 
 ## Tagging
@@ -30,7 +30,7 @@ Run from the repository root (stdlib Python 3.10+; no model call):
 A JSON-free serial plan has no slice JSON, so preflight checks the code locations its prose cites:
 
 - An anchor is a single-backtick inline code span outside fenced blocks whose whole content is `<file>.<ext>:<lines>`. The file name needs a dot and an extension that starts with a letter, so `Dockerfile:9` and `127.0.0.1:9222` are not anchors. `<lines>` is `N`, `N-M`, or a comma list of those, for example `src/app/x.ts:40-72` or `x.ts:24-29,151`. Lines start at 1.
-- Resolution: an absolute, drive-letter or `~` path is checked as that one file. A relative path resolves from the repo root, else as a path suffix of any repo file (`ui/panel.py:10` matches `src/pkg/ui/panel.py`). A path without `/` that matches no file is not an anchor, so `api.example.com:8080` is ignored; a path with `/` that matches nothing is `PATH_MISSING`.
+- Resolution: an absolute, drive-letter or `~` path is checked as that one file. A relative path resolves from the repo root, else as a path suffix of any repo file (`ui/panel.py:10` matches `src/pkg/ui/panel.py`). A path that matches nothing is `PATH_MISSING`, except a path without `/` whose extension no repo file has: that is not an anchor, so `api.example.com:8080` is ignored while `gone.py:4` in a Python repo fails.
 - Symbols are the single-backtick spans that directly follow an anchor on the same line, separated only by spaces, commas or `/`, for example `` `x.ts:40-72` `parse`/`Wave.run()` ``. Each identifier (a trailing `()` is dropped, then split on `.`) must appear as a word in the file. Spans that name an existing file, or are not identifiers (`ASK_AT = 50`), are skipped; any other text ends the run.
 - Plans with slice JSON get no anchor checks; their `owns`, `reads` and `symbols` are checked instead.
 

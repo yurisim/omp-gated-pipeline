@@ -201,6 +201,11 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual((diag["slice"], diag["line"]), (None, 5))
         self.assertIn("src/gone.ts", diag["detail"])
 
+    def test_serial_plan_bare_name_with_a_repo_extension_missing_fails(self):
+        code, report = self.run_preflight(serial_plan("See `gone.ts:4`, host `api.example.com:8080`."))
+        self.assertEqual((code, self.codes(report), report["anchors"]), (1, ["PATH_MISSING"], 1))
+        self.assertIn("gone.ts", report["diagnostics"][0]["detail"])
+
     def test_serial_plan_anchor_past_end_of_file_fails(self):
         for anchor in ("src/a.ts:2-9", "src/a.ts:1,40", "a.ts:4"):
             with self.subTest(anchor):
@@ -208,8 +213,8 @@ class PreflightTest(unittest.TestCase):
                 self.assertEqual((code, self.codes(report)), (1, ["LINE_OUT_OF_RANGE"]))
                 self.assertIn("3 lines", report["diagnostics"][0]["detail"])
 
-    def test_serial_plan_anchor_naming_line_zero_fails(self):
-        for anchor in ("src/a.ts:0", "src/a.ts:0-2", "src/a.ts:1,0"):
+    def test_serial_plan_anchor_naming_line_zero_or_reversed_range_fails(self):
+        for anchor in ("src/a.ts:0", "src/a.ts:0-2", "src/a.ts:1,0", "src/a.ts:3-2"):
             with self.subTest(anchor):
                 code, report = self.run_preflight(serial_plan(f"Read `{anchor}`."))
                 self.assertEqual((code, self.codes(report)), (1, ["LINE_OUT_OF_RANGE"]))
