@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: Hostile second-opinion review, scoped to the requested change, by a reviewer from the model family that did not write the work. Use after drafting code, content, or answers (plans only on explicit user request), before merging, or when a review felt too agreeable.
+description: Main-session coordinator only; subagents never load this skill (reviewer agents read only skill://adversarial-review/reviewer.md). Hostile second-opinion review, scoped to the requested change, by a reviewer from the model family that did not write the work. Use after drafting code, content, or answers (plans only on explicit user request), before merging, or when a review felt too agreeable.
 ---
 
 # Adversarial Review
@@ -51,7 +51,7 @@ The reviewer has only `read`, `grep`, `glob`: no shell, no git, no tests. Hand i
 
 Plans (only on explicit user request) and answers: OUTPUT is the plan path or the pasted answer; the patch does not apply, and CHECKS is `none` unless the plan claims pre-existing check failures, in which case `BASE: <resolved 40-hex sha>` and `BASELINE_CHECKS: local://<topic>-baseline-checks.md` are required.
 
-Notes: both agents load their instructions from skill://adversarial-review/reviewer.md and are read-only (`read`, `grep`, `glob`). Each pairs with an advisor from the other family that second-guesses every turn: `adversarial-reviewer` runs on `@slow` with `advisor: true` (the `advisor` model role); `adversarial-reviewer-sol` runs on `openai-codex/gpt-6.1-sol:max` with `advisor: "@slow"`. Override either advisor via `task.agentAdvisor`.
+Notes: both agents load their instructions from skill://adversarial-review/reviewer.md and are read-only (`read`, `grep`, `glob`). Each pairs with an advisor from the other family: `adversarial-reviewer` runs on `@slow` with `advisor: true` (the `advisor` model role); `adversarial-reviewer-sol` runs on `openai-codex/gpt-6.1-sol:high` with `advisor: "@slow"`. Override either advisor via `task.agentAdvisor`. With the omp settings in the package README ("Required omp settings"), the advisor reviews the reviewer's finished run before the reviewer returns, and a `concern` or `blocker` gets one revision pass, so the returned report already includes the advisor's review.
 
 ## Verdict (skeptical by default, never auto-fix)
 

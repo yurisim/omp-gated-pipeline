@@ -14,6 +14,17 @@ omp plugin package: plan → deterministic preflight (0 model tokens) → Sol sl
 
 Project `.omp/agents`, `.omp/skills`, and user `~/.omp/agent/agents` files with the same names shadow this package; delete them.
 
+## Required omp settings
+
+The reviewer agents' advisor must finish its review before the reviewer returns. Set in `~/.omp/agent/config.yml`:
+
+    advisor:
+      enabled: true
+      reviewMode: agent-end
+      syncBacklog: strict
+
+These also apply to the main session's advisor: one synchronous review per run instead of one per turn. Do not add a `WATCHDOG.yml` advisor roster; any entry replaces the default advisor these settings configure.
+
 ## Project contract
 
 Each project's `AGENTS.md` carries a `Pipeline - <project> specifics` section: a barrier command (`--label`, `--expect red`, `--base`, `--full`, `-- <ids>`; writes `.scratch/barrier/<label>.json`) or an integration command for the no-barrier path, test-id format, skip markers, wave-0 red rules, slice-forbidden commands, baseline-worktree setup, KNOWN sources, and review conventions.
