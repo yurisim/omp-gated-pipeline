@@ -14,6 +14,8 @@ from typing import Any
 FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 WAVES_HEADING = re.compile(r"^parallel waves\b", re.IGNORECASE)
+SERIAL_LINE = re.compile(r"^\s*Serial:\s*\S")
+ACCEPTANCE_LINE = re.compile(r"^\s*Acceptance:\s*\S")
 PRUNED_DIRS = {
     ".git", "node_modules", "dist", "build", ".venv", "venv",
     "__pycache__", ".scratch", ".nx", ".angular", "coverage",
@@ -67,6 +69,9 @@ def extract_slices(text: str) -> tuple[list[tuple[dict[str, Any], int]], list[di
     fence_line = 0
     capture_json = False
     body: list[str] = []
+    serial = False
+    acceptance = False
+    saw_json = False
 
     def parse_block() -> None:
         try:
@@ -101,6 +106,8 @@ def extract_slices(text: str) -> tuple[list[tuple[dict[str, Any], int]], list[di
             fence_line = line_number
             words = info.split(maxsplit=1)
             capture_json = waves_level is not None and bool(words) and words[0].lower() == "json"
+            if capture_json:
+                saw_json = True
             continue
 
         heading = HEADING.match(line)
@@ -111,13 +118,24 @@ def extract_slices(text: str) -> tuple[list[tuple[dict[str, Any], int]], list[di
                     waves_level = level
             elif level <= waves_level:
                 break
+        elif waves_level is not None:
+            if SERIAL_LINE.match(line):
+                serial = True
+            elif ACCEPTANCE_LINE.match(line):
+                acceptance = True
 
     if fence_close is not None and capture_json:
         parse_block()
     if waves_level is None:
         diagnostics.append(diagnostic("BAD_SPEC", None, None, "no `## Parallel waves` section"))
     elif not slices and not diagnostics:
-        diagnostics.append(diagnostic("BAD_SPEC", None, None, "no slice spec arrays under Parallel waves"))
+        if not serial or saw_json:
+            diagnostics.append(diagnostic("BAD_SPEC", None, None, "no slice spec arrays under Parallel waves"))
+        elif not acceptance:
+            diagnostics.append(diagnostic(
+                "BAD_SPEC", None, None,
+                "serial plan without slice JSON needs an `Acceptance: <command>` line under Parallel waves",
+            ))
     return slices, diagnostics
 
 

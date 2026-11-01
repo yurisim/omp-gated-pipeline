@@ -26,7 +26,7 @@ Write the waves into the plan's `## Parallel waves` section:
 - `agent` is `synth` (Sol) by default. Use `sonic` only when the plan gives the exact code.
 - Size each slice so `owns` + `reads` stays under ~200K tokens (bytes / 4); split larger slices so Sol's context stays small.
 - Last wave: work that needs integrated output, such as docs citing final line numbers.
-- Serial plans ("Serial: <reason>") still give the slice JSON and wave-0 tests. The coordinator executes them in order through the same barrier gates.
+- Serial plans ("Serial: <reason>") still give the slice JSON and wave-0 tests and run in order through the same barrier gates. Exception: a serial plan that is one slice with no spec tests writes only `Serial: <reason>` and `Acceptance: <exact command>`, each on its own line outside any fence, and no JSON. The coordinator executes it inline (no `task` batch, no `synth`/`sonic`), runs that acceptance command, then the integration gate (`<barrier> --label integrate --base $BASE --full`, or the no-barrier integration command). On a failed gate the coordinator fixes it and reruns that gate once with the `-retry` suffix; a second failure stops the pipeline and is reported. The critic loop does not apply.
 - Before proposing the plan, and again before spawning wave 1, run skill://plan-preflight on the plan file; spawn only on `pass`.
 
 Executing a plan that lacks the section: add it to the plan file first, then spawn.

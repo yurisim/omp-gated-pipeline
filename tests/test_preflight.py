@@ -106,6 +106,23 @@ class PreflightTest(unittest.TestCase):
         code, report = self.run_preflight(bad)
         self.assertEqual((code, self.codes(report)), (1, ["BAD_SPEC"]))
 
+    def test_serial_plan_without_json_needs_acceptance_line(self):
+        waves = "# Plan\n\n## Parallel waves\n\nSerial: one file, nothing to split.\n"
+        code, report = self.run_preflight(waves + "\nAcceptance: `python check.py`\n\n## Verification\n\nnone\n")
+        self.assertEqual((code, report["verdict"], report["slices"], report["diagnostics"]), (0, "pass", 0, []))
+        code, report = self.run_preflight(waves + "\n## Verification\n\nnone\n")
+        self.assertEqual((code, self.codes(report)), (1, ["BAD_SPEC"]))
+        self.assertIn("Acceptance:", report["diagnostics"][0]["detail"])
+
+    def test_serial_form_rejects_lines_outside_section_in_fences_or_beside_json(self):
+        outside = "# Plan\n\n## Context\n\nSerial: x\nAcceptance: y\n\n## Parallel waves\n\nnothing\n"
+        fenced = f"# Plan\n\n## Parallel waves\n\n{FENCE}text\nSerial: x\nAcceptance: y\n{FENCE}\n"
+        with_json = f"# Plan\n\n## Parallel waves\n\nSerial: x\nAcceptance: y\n\n{FENCE}json\n[]\n{FENCE}\n"
+        for name, text in (("outside", outside), ("fenced", fenced), ("with_json", with_json)):
+            with self.subTest(name):
+                code, report = self.run_preflight(text)
+                self.assertEqual((code, self.codes(report)), (1, ["BAD_SPEC"]))
+
     def test_slice_missing_required_key_fails(self):
         spec = slice_spec(owns=["src/a.ts"])
         del spec["acceptance"]
