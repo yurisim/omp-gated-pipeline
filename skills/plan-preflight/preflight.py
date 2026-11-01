@@ -1,4 +1,4 @@
-"""Read-only path, symbol, line, and changed-signature checks for plans."""
+"""Read-only path, symbol, and changed-signature checks for structured plans."""
 
 import argparse
 import json
@@ -16,9 +16,6 @@ HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 WAVES_HEADING = re.compile(r"^parallel waves\b", re.IGNORECASE)
 SERIAL_LINE = re.compile(r"^\s*Serial:\s*\S")
 ACCEPTANCE_LINE = re.compile(r"^\s*Acceptance:\s*\S")
-INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)(.*?)(?<!`)\1(?!`)")
-ANCHOR = re.compile(r"((?:[A-Za-z]:)?[^\s`:]*\.[A-Za-z][^/\\\s`:.]*):([0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)")
-ANCHOR_SYMBOL = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*(?:\(\))?")
 PRUNED_DIRS = {
     ".git", "node_modules", "dist", "build", ".venv", "venv",
     "__pycache__", ".scratch", ".nx", ".angular", "coverage",
@@ -310,143 +307,6 @@ def check_slices(slices: list[tuple[dict[str, Any], int]], root: Path) -> list[d
     return diagnostics
 
 
-def check_anchors(text: str, root: Path) -> tuple[list[dict[str, Any]], int]:
-    diagnostics: list[dict[str, Any]] = []
-    anchors = 0
-    fence_close: re.Pattern[str] | None = None
-    repo_files: list[str] | None = None
-    repo_extensions: set[str] | None = None
-    file_data: dict[str, tuple[str, int]] = {}
-
-    def files() -> list[str]:
-        nonlocal repo_files
-        if repo_files is None:
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                    capture_output=True,
-                )
-                if result.returncode == 0:
-                    repo_files = list(dict.fromkeys(
-                        os.fsdecode(path).replace("\\", "/")
-                        for path in result.stdout.split(b"\0") if path
-                    ))
-            except OSError:
-                pass
-            if repo_files is None:
-                repo_files = []
-                for directory, dirs, names in os.walk(root):
-                    dirs[:] = [name for name in dirs if name not in PRUNED_DIRS]
-                    repo_files.extend(
-                        (Path(directory) / name).relative_to(root).as_posix()
-                        for name in names
-                    )
-        return repo_files
-
-    def resolve_files(value: str) -> list[str]:
-        path = normalize_path(value)[1]
-        if Path(path).is_absolute() or path.startswith(("/", "~")) or re.match(r"^[A-Za-z]:", path):
-            target = resolve_path(root, path)
-            return [target.as_posix()] if target.is_file() else []
-        if (root / path).is_file():
-            return [path]
-        return [
-            name for name in files()
-            if name.endswith("/" + path) and (root / name).is_file()
-        ]
-
-    def load(path: str) -> tuple[str, int]:
-        if path not in file_data:
-            try:
-                content = (root / path).read_bytes().decode("utf-8", errors="ignore")
-            except OSError:
-                content = ""
-            lines = content.count("\n") + int(bool(content) and not content.endswith("\n"))
-            file_data[path] = content, lines
-        return file_data[path]
-
-    for line_number, line in enumerate(text.replace("\r\n", "\n").split("\n"), 1):
-        if fence_close is not None:
-            if fence_close.fullmatch(line):
-                fence_close = None
-            continue
-        opener = FENCE_OPEN.match(line)
-        if opener:
-            fence = opener[1]
-            fence_close = re.compile(r"^ {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}\s*$")
-            continue
-
-        in_range: list[str] = []
-        previous_end = 0
-        for span in INLINE_CODE.finditer(line):
-            value = span[2]
-            anchor = ANCHOR.fullmatch(value) if span[1] == "`" else None
-            if anchor:
-                path = normalize_path(anchor[1])[1]
-                candidates = resolve_files(path)
-                if not candidates and "/" not in path:
-                    if repo_extensions is None:
-                        repo_extensions = {
-                            name.rsplit(".", 1)[1].lower() for name in files()
-                            if "." in name.rsplit("/", 1)[-1]
-                        }
-                    if path.rsplit(".", 1)[1].lower() not in repo_extensions:
-                        anchor = None
-            if anchor:
-                anchors += 1
-                numbers = [int(number) for number in re.findall(r"[0-9]+", anchor[2])]
-                in_range = []
-                if 0 in numbers:
-                    diagnostics.append(diagnostic(
-                        "LINE_OUT_OF_RANGE", None, line_number,
-                        f"`{value}` names line 0; lines start at 1",
-                    ))
-                    previous_end = span.end()
-                    continue
-                if any(int(start) > int(end) for start, end in re.findall(r"([0-9]+)-([0-9]+)", anchor[2])):
-                    diagnostics.append(diagnostic(
-                        "LINE_OUT_OF_RANGE", None, line_number,
-                        f"`{value}` is a reversed range",
-                    ))
-                    previous_end = span.end()
-                    continue
-                highest = max(numbers)
-                in_range = [name for name in candidates if highest <= load(name)[1]]
-                if not candidates:
-                    diagnostics.append(diagnostic(
-                        "PATH_MISSING", None, line_number, f"`{value}` does not exist",
-                    ))
-                elif not in_range:
-                    first = candidates[0]
-                    diagnostics.append(diagnostic(
-                        "LINE_OUT_OF_RANGE", None, line_number,
-                        f"`{value}` is past the end of {first} ({load(first)[1]} lines)",
-                    ))
-            else:
-                if not re.fullmatch(r"[\s,/]*", line[previous_end:span.start()]):
-                    in_range = []
-                if (
-                    in_range and span[1] == "`" and ANCHOR_SYMBOL.fullmatch(value)
-                    and not resolve_files(value)
-                ):
-                    segments = [segment for segment in value.removesuffix("()").split(".") if segment]
-                    patterns = [(segment, word_pattern(segment)) for segment in segments]
-                    first_missing: list[str] = []
-                    for index, name in enumerate(in_range):
-                        missing = [segment for segment, pattern in patterns if not pattern.search(load(name)[0])]
-                        if not missing:
-                            break
-                        if index == 0:
-                            first_missing = missing
-                    else:
-                        diagnostics.append(diagnostic(
-                            "SYMBOL_MISSING", None, line_number,
-                            f"`{value}` not found in {in_range[0]} (missing: {', '.join(first_missing)})",
-                        ))
-            previous_end = span.end()
-    return diagnostics, anchors
-
-
 def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     sys.stdout.reconfigure(encoding="utf-8")
@@ -459,12 +319,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as error:
         parser.error(f"cannot read plan {args.plan!r}: {error}")
     root = find_root(args.root)
-    text = data.decode("utf-8", errors="replace")
-    extracted, diagnostics = extract_slices(text)
-    anchors = 0
-    if not extracted and not diagnostics:
-        anchor_diagnostics, anchors = check_anchors(text, root)
-        diagnostics.extend(anchor_diagnostics)
+    extracted, diagnostics = extract_slices(data.decode("utf-8", errors="replace"))
     slices, validation_diagnostics = validate_slices(extracted)
     diagnostics.extend(validation_diagnostics)
     diagnostics.extend(check_slices(slices, root))
@@ -472,7 +327,6 @@ def main(argv: list[str] | None = None) -> int:
         "verdict": "fail" if diagnostics else "pass",
         "root": root.as_posix(),
         "slices": len(slices),
-        "anchors": anchors,
         "diagnostics": diagnostics,
         "elapsed_ms": int((time.perf_counter() - started) * 1000),
     }

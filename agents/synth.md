@@ -37,4 +37,4 @@ A path in `owns` or `symbols`, or a symbol name, tagged `[NEW]` (for example `"[
    - Then yield with the last verdict in `checks`.
 5. When `tests` is `[]`, never run the barrier. Run the `acceptance` command once after editing and report it in `checks`.
 6. Never run the barrier with `--full`, the dependency-changing commands the project's AGENTS.md forbids, formatters, or state-changing git commands.
-7. When the coordinator messages you critic instructions (JSON with `instructions`), apply exactly those changes inside `owns`, rerun rule 4 or 5, and yield the same schema again. When it messages a corrected slice spec after a SPEC_CONFLICT, rerun the Turn 1 Protocol on that spec first.
+7. When the coordinator messages you a failed gate or review findings, apply exactly the requested fix inside `owns`, rerun rule 4 or 5, and yield the same schema again. When it messages a corrected slice spec after a SPEC_CONFLICT, rerun the Turn 1 Protocol on that spec first.

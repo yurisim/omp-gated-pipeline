@@ -24,14 +24,6 @@ def plan_text(slices, body=""):
     return f"# Plan\n\n## Context\n\n{body}\n\n## Parallel waves\n\n{waves}\n## Verification\n\nnone\n"
 
 
-def serial_plan(body):
-    """JSON-free serial plan; `body` starts on plan line 5."""
-    return (
-        f"# Plan\n\n## Context\n\n{body}\n\n## Parallel waves\n\n"
-        "Serial: docs only.\nAcceptance: `python check.py`\n\n## Verification\n\nnone\n"
-    )
-
-
 class PreflightTest(unittest.TestCase):
     def setUp(self):
         self._repo = tempfile.TemporaryDirectory()
@@ -183,72 +175,6 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual((code, len(details)), (1, 26))
         self.assertTrue(details[0].startswith("src/use00.ts references `add`"))
         self.assertEqual(details[-1], "... and 2 more files reference add")
-
-    def test_serial_plan_anchors_with_real_lines_and_symbols_pass(self):
-        body = (
-            "- `src/a.ts:1-3` `add`/`a.b`, `ASK = 5`: full path, dotted symbol, non-identifier span skipped.\n"
-            "- `a.ts:2` `add` resolves by path suffix; `src/a.ts:1,3` takes a comma list.\n"
-            "- `src/a.ts:1` uses `notInFile` after prose, so that span is not a symbol."
-        )
-        self.write("src/a.ts", "export function add(a: number, b: number): number {\n  return a.b + b;\n}\n")
-        code, report = self.run_preflight(serial_plan(body))
-        self.assertEqual((code, report["diagnostics"], report["slices"], report["anchors"]), (0, [], 0, 4))
-
-    def test_serial_plan_anchor_to_missing_file_fails(self):
-        code, report = self.run_preflight(serial_plan("See `src/gone.ts:4` and `src/a.ts:1`."))
-        self.assertEqual((code, self.codes(report)), (1, ["PATH_MISSING"]))
-        diag = report["diagnostics"][0]
-        self.assertEqual((diag["slice"], diag["line"]), (None, 5))
-        self.assertIn("src/gone.ts", diag["detail"])
-
-    def test_serial_plan_bare_name_with_a_repo_extension_missing_fails(self):
-        code, report = self.run_preflight(serial_plan("See `gone.ts:4`, host `api.example.com:8080`."))
-        self.assertEqual((code, self.codes(report), report["anchors"]), (1, ["PATH_MISSING"], 1))
-        self.assertIn("gone.ts", report["diagnostics"][0]["detail"])
-
-    def test_serial_plan_anchor_past_end_of_file_fails(self):
-        for anchor in ("src/a.ts:2-9", "src/a.ts:1,40", "a.ts:4"):
-            with self.subTest(anchor):
-                code, report = self.run_preflight(serial_plan(f"Read `{anchor}`."))
-                self.assertEqual((code, self.codes(report)), (1, ["LINE_OUT_OF_RANGE"]))
-                self.assertIn("3 lines", report["diagnostics"][0]["detail"])
-
-    def test_serial_plan_anchor_naming_line_zero_or_reversed_range_fails(self):
-        for anchor in ("src/a.ts:0", "src/a.ts:0-2", "src/a.ts:1,0", "src/a.ts:3-2"):
-            with self.subTest(anchor):
-                code, report = self.run_preflight(serial_plan(f"Read `{anchor}`."))
-                self.assertEqual((code, self.codes(report)), (1, ["LINE_OUT_OF_RANGE"]))
-
-    def test_serial_plan_prose_that_only_looks_like_anchors_passes(self):
-        self.write("src/b.ts", "export const b = 1;\n")
-        self.write("README.md", "# readme\n")
-        body = (
-            "CDP on `127.0.0.1:9222`, contrast `4.5:1`, host `api.example.com:8080`.\n"
-            "`src/a.ts:1` `add`, `b.ts`, `README.md` list files beside an anchor."
-        )
-        code, report = self.run_preflight(serial_plan(body))
-        self.assertEqual((code, report["diagnostics"], report["anchors"]), (0, [], 1))
-
-    def test_serial_plan_absolute_anchor_resolves_without_suffix_search(self):
-        root = self.root.as_posix()
-        body = f"`{root}/src/a.ts:2` `add` and `{root}/gone/a.ts:1`"
-        code, report = self.run_preflight(serial_plan(body))
-        self.assertEqual((code, self.codes(report), report["anchors"]), (1, ["PATH_MISSING"], 2))
-        self.assertIn("gone/a.ts", report["diagnostics"][0]["detail"])
-
-    def test_serial_plan_anchor_symbol_absent_from_file_fails(self):
-        code, report = self.run_preflight(serial_plan("\n`src/a.ts:1` `add`/`Calc.mul`, `sum`"))
-        self.assertEqual((code, self.codes(report)), (1, ["SYMBOL_MISSING", "SYMBOL_MISSING"]))
-        self.assertEqual([d["line"] for d in report["diagnostics"]], [6, 6])
-        self.assertIn("Calc", report["diagnostics"][0]["detail"])
-        self.assertIn("sum", report["diagnostics"][1]["detail"])
-
-    def test_anchors_in_fences_or_json_plans_are_not_checked(self):
-        fenced = serial_plan(f"{FENCE}markdown\nSee `src/gone.ts:4`.\n{FENCE}")
-        code, report = self.run_preflight(fenced)
-        self.assertEqual((code, report["diagnostics"], report["anchors"]), (0, [], 0))
-        code, report = self.run_preflight(plan_text([slice_spec(owns=["src/a.ts"])], body="See `src/gone.ts:4`."))
-        self.assertEqual((code, report["diagnostics"], report["anchors"]), (0, [], 0))
 
 
 if __name__ == "__main__":

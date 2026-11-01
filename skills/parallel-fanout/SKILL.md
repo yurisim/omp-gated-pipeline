@@ -11,7 +11,7 @@ Fan when ALL hold: disjoint mutable scope per slice (files, modules, features); 
 
 ## 0. Baseline
 
-Before the first edit, record `BASE=$(git stash create)` (empty output, or when committing/splitting already-uncommitted work: use `BASE=$(git rev-parse HEAD)`) and note the resolved sha in a todo so it survives compaction. It snapshots pre-existing uncommitted work without touching the tree or the stash list, so `git diff $BASE` later shows only this change. In a repo with no commits yet both commands fail: note `BASE: none (no commits)` and treat every file as untracked. When any post-integration check fails and is suspected to predate the wave, reproduce it in a detached worktree at `$BASE`, set up as the project's AGENTS.md pipeline section says, and save the output to `local://<topic>-baseline-checks.md` before classifying the failure as pre-existing. See skill://adversarial-review.
+Before the first edit, record `BASE=$(git stash create)` (empty output, or when committing/splitting already-uncommitted work: use `BASE=$(git rev-parse HEAD)`). It snapshots pre-existing uncommitted work without touching the tree or the stash list, so `git diff $BASE` later shows only this change. In a repo with no commits yet both commands fail: note `BASE: none (no commits)` and treat every file as untracked. When any post-integration check fails and is suspected to predate the wave, reproduce it in a detached worktree at `$BASE`, set up as the project's AGENTS.md pipeline section says, and save the output to `local://<topic>-baseline-checks.md` before classifying the failure as pre-existing. See skill://adversarial-review.
 
 ## 1. Plan for maximum parallelism
 
@@ -26,7 +26,7 @@ Write the waves into the plan's `## Parallel waves` section:
 - `agent` is `synth` (Sol) for every slice that edits code, scripts, tests, or build config: the plan gives it contracts (`symbols`, `invariants`, `tests`), never implementation code. Use `sonic` only for non-code edits (docs, instructions, content) whose exact text the plan gives.
 - Size each slice so `owns` + `reads` stays under ~200K tokens (bytes / 4); split larger slices so Sol's context stays small.
 - Last wave: work that needs integrated output, such as docs citing final line numbers.
-- Serial plans ("Serial: <reason>") still give the slice JSON and wave-0 tests and run in order through the same barrier gates. Exception: a serial plan that is one slice with no spec tests and no code, script, test, or build-config edits writes only `Serial: <reason>` and `Acceptance: <exact command>`, each on its own line outside any fence, and no JSON. The coordinator executes it inline (no `task` batch, no `synth`/`sonic`), runs that acceptance command, then the integration gate (`<barrier> --label integrate --base $BASE --full`, or the no-barrier integration command). When every file changed since `$BASE` (`git diff --name-only $BASE` plus `git ls-files --others --exclude-standard`) is documentation that no code, test or build reads, the coordinator skips the integration gate and records `docs-only; no integration gate` with that file list in CHECKS; the plan's own docs-only claim is not enough. On a failed gate the coordinator fixes it and reruns that gate once with the `-retry` suffix; a second failure stops the pipeline and is reported. The critic loop does not apply.
+- Serial plans ("Serial: <reason>") still give the slice JSON and wave-0 tests and run in order through the same barrier gates. Exception: a serial plan that is one slice with no spec tests and no code, script, test, or build-config edits writes only `Serial: <reason>` and `Acceptance: <exact command>`, each on its own line outside any fence, and no JSON. The coordinator executes it inline (no `task` batch, no `synth`/`sonic`), runs that acceptance command, then the integration gate (`<barrier> --label integrate --base $BASE --full`, or the no-barrier integration command). When every file changed since `$BASE` (`git diff --name-only $BASE` plus `git ls-files --others --exclude-standard`) is documentation that no code, test or build reads, the coordinator skips the integration gate and records `docs-only; no integration gate` with that file list in CHECKS; the plan's own docs-only claim is not enough. On a failed gate the coordinator fixes it and reruns that gate once; a second failure stops the pipeline and is reported.
 - Before proposing the plan, and again before spawning wave 1, run skill://plan-preflight on the plan file; spawn only on `pass`.
 
 Executing a plan that lacks the section: add it to the plan file first, then spawn.
@@ -57,36 +57,19 @@ Barrier: the project's AGENTS.md pipeline section names the command (`<barrier>`
 
 Keep working while siblings run. Collect with `wait`. Apply every `planDeviations` entry to dependent artifacts before gating.
 
-Spec conflicts (synth's Turn 1 Protocol):
-- A synth that returns a non-empty `specConflict` made no edits. Read each cited `file:line`.
-- Real conflict: patch the slice spec in the plan file (and the wave-0 contract or spec test when the conflict lies there), rerun skill://plan-preflight, then send the corrected slice JSON to the same synth with `write agent://<id>` and wait for it. If the fix changed a wave-0 contract or spec test, first rerun `wave0-red` on the changed test ids, include the changed contract in the message, and re-dispatch the same way any already-returned sibling whose `reads` or `symbols` use that contract.
-- If the fix needs a design or scope decision, or the same slice returns a second `specConflict`, stop and `ask` the user with the conflict lines.
-- Refuted conflict (the cited line does not show the contradiction): send the unchanged spec with a one-line refutation citing `file:line`; this counts as that slice's one re-dispatch.
-- Spec-conflict handling never consumes the pipeline's single critic retry.
+Spec conflicts: a `synth` that returns a non-empty `specConflict` made no edits. Read each cited `file:line`, then `ask` the user with the `SPEC_CONFLICT` lines and what you found. After the user decides, patch the plan, rerun skill://plan-preflight, and send the corrected slice JSON to the same synth with `write agent://<id>`.
 
-Slice gate, after the whole wave has returned:
-- A slice is accepted when its last barrier verdict (or acceptance command) passed.
-- A failed slice with non-empty `tests` gets one coordinator rerun of its barrier, `--label <id>-rerun`, because siblings' half-finished edits can break a run mid-wave.
-- If that tests-backed rerun still fails, it takes the pipeline's single retry: run the critic loop below with BARRIER `.scratch/barrier/<id>-rerun.json`, then rerun as `<id>-retry`. A failure there stops the pipeline.
-- For `tests: []`, if the initial acceptance command failed, the coordinator reruns that exact command once after the wave. If it still fails, stop and report the exact command, exit code, and output. Never run the barrier without test ids or `--full`, fabricate a barrier JSON, or invoke the critic for an acceptance-only failure without a failed BARRIER.
+Slice gate, after the whole wave has returned: a slice is accepted when its last barrier verdict (or acceptance command) passed.
 
-Integration barrier, after the last wave: `<barrier> --label integrate --base $BASE --full`.
-- `pass`: go to the audit (skill://adversarial-review, section "Barrier-gated changes").
-- `fail`: run the critic loop, unless the pipeline's single retry is already spent. In that case stop and report.
+Integration gate, after the last wave: `<barrier> --label integrate --base $BASE --full`. `pass` goes to the audit (skill://adversarial-review, section "Barrier-gated changes").
 
-No-barrier projects (the AGENTS.md pipeline section names no barrier command): slice gates are their acceptance commands. The integration gate is the section's integration command: save its output to `local://<topic>-integrate.txt` and `git diff $BASE` to `local://<topic>.patch`; exit 0 is `pass`. On `fail`, the critic loop runs with GATE (command, exit code, those two files) in place of BARRIER, and the retry reruns the same command. The audit uses `local://<topic>.patch` as OUTPUT.
+No-barrier projects (the AGENTS.md pipeline section names no barrier command): slice gates are their acceptance commands. The integration gate is the section's integration command: save its output to `local://<topic>-integrate.txt` and `git diff $BASE` to `local://<topic>.patch`; exit 0 is `pass`. The audit uses `local://<topic>.patch` as OUTPUT.
 
-Critic loop (at most once per pipeline run):
-1. Spawn one `critic` with BARRIER (the failed barrier JSON), SPECS (all slice JSON), and OWNERS (slice id -> implementation agent id, for either `synth` or `sonic`).
-2. If `escalate` is true, or `owner` is `coordinator` and the fix touches a spec test, stop: report the diagnosis and trace to the user via `ask`.
-3. Otherwise resolve the owner through OWNERS and dispatch with `write agent://<owner implementation agent id>`:
-   - For `synth`, send the critic's JSON to the warm owner, then wait for it to return.
-   - For `sonic`, send the exact focused critic instructions and the slice's `owns` list to that same sonic owner. Require edits only inside `owns`, no extra tests, and no edits, deletions, skips, or loosening of spec tests. Wait for it to return; the coordinator runs its checks.
-   - A coordinator-owned contract fix is applied by the coordinator itself.
-4. Rerun the failed gate with the `-retry` suffix (`integrate-retry`, with `--base $BASE --full`).
-   - For a `sonic` owner, the coordinator first reruns its slice barrier with the exact spec test ids as `<id>-retry`, or its exact acceptance command when `tests` is `[]`. A failure stops the pipeline; for an acceptance-command failure, report the exact command, exit code, output, and critic diagnosis rather than inventing a barrier JSON or invoking another critic. If this was the failed gate, use that result rather than running it twice; otherwise rerun the failed gate only after the slice passes. These checks are part of the same single retry.
-5. A second `fail` stops the pipeline: report that barrier JSON, its trace, and the critic diagnosis to the user. No third attempt and no audit.
+Failed gate (one retry per pipeline run):
+1. Send the failure with `write agent://<id>` to the implementation agent that owns the failing code: the failed test ids and the barrier `.json`/`.txt` (no-barrier: the command, exit code, and saved output), plus focused fix instructions inside its `owns`. Forbid new tests and any edit, deletion, skip, or loosening of spec tests. A failure in a wave-0 contract or spec test is the coordinator's to fix.
+2. Wait for it to return, then rerun the failed gate once with a `-retry` label suffix (no-barrier: the same command). For a `sonic` owner, first rerun its slice barrier or acceptance command.
+3. A second failure, or a failure no single owner can fix, stops the pipeline: `ask` the user with the gate output. No audit.
 
-Audit fixes are re-gated with `--label integrate-audit --base $BASE --full`. A `fail` there gets no critic: stop and report it to the user via `ask`.
+Audit fixes are re-gated with `--label integrate-audit --base $BASE --full` (no-barrier: the integration command). A `fail` there stops the pipeline: `ask` the user with its output.
 
 When the user says `parallel`/`parallelize`, MUST use `task` subagents - parallel tool calls alone are insufficient.
