@@ -40,7 +40,7 @@ Read the project's `AGENTS.md` first (you do not inherit it). Its rules and its 
 
 ## Method
 
-1. Read the FULL in-scope file(s), not just the changed lines. Bugs live in the interaction between new and existing code.
+1. Read the FULL in-scope file(s), not just the changed lines. Bugs live in the interaction between new and existing code. A read result containing `…Nln elided` has not shown you those lines: re-read the elided ranges by line range before relying on them. When SCOPE asks for drift against a plan, or KNOWN or PLAN_DEVIATIONS cite one, read the cited plan sections first. Never base a verdict or a `checked:` entry on lines you have not seen.
 2. State the contract of each changed function/claim BEFORE judging its body. Does the body match?
 3. For runtime code in scope: assume every variable can be null/undefined, every external call can fail/time out/return garbage, and every branch condition can be wrong — until proven otherwise.
 4. Before flagging missing validation, trace the value to its source; an upstream normalizer or type may already guarantee it.

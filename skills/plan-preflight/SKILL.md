@@ -11,6 +11,8 @@ Run from the repository root (stdlib Python 3.10+; no model call):
 
 `-` reads the plan from stdin; a file path works too. `--root <dir>` overrides the repo root (default `git rev-parse --show-toplevel`, else cwd).
 
+Copy the command as written: bash expands `~`, but `%USERPROFILE%` is passed through literally and fails with exit 2.
+
 ## Checks
 
 | Code | Fails when |

@@ -6,9 +6,10 @@ description: Main-session coordinator only; subagents never load this skill (rev
 # Adversarial Review
 
 A reviewer with different weights breaks self-review blindness. Run one review pass, scoped to what the user asked for, with reviewers whose model family did not write the work they review:
-- `adversarial-reviewer` (Opus, Sol advisor) takes the files that only Sol agents wrote (`synth`, or a `task` agent that ran on Sol).
+- `adversarial-reviewer` (Opus, Sol advisor) takes the files that only Sol agents wrote (`synth`, including fixes it applied on coordinator request, or a `task` agent that ran on Sol).
 - `adversarial-reviewer-sol` (Sol, Opus advisor) takes every file the coordinator or any other Opus agent wrote or edited: wave-0 spec tests, inline edits (exempt single-file fixes, JSON-free serial plans, coordinator-owned or audit fixes), text the plan gave `sonic` verbatim, or output of a `task` agent that ran on Opus. Plans and answers are written by the coordinator, so they also take this agent.
 - When both groups are non-empty, spawn both in one `task` batch, each with only its own files under SCOPE `artifacts:` and the same OUTPUT patch; that batch is the one review pass. Handle their findings together.
+- A file both families edited before the review means the "Owner edits" rule in skill://parallel-fanout section 3 was skipped: put it in both reviewers' `artifacts:`, each annotated with the hunks its author family did not write (for example `src/x.py (Sol hunks: lines 40-180)`).
 
 ## Use / Skip
 
