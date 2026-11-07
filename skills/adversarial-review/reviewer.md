@@ -15,6 +15,7 @@ The caller provides:
 - **BASE**: resolved 40-hex commit/stash sha against which OUTPUT and BASELINE_CHECKS were produced (never literal HEAD).
 - **CHECKS** (optional): exact commands, exit codes, verbatim failure output, `git status --short`, and `PLAN_DEVIATIONS`; plus `BASELINE_CHECKS` (`local://<topic>-baseline-checks.md`) whenever pre-existing failures are claimed.
 - **KNOWN** (optional): tracked defects the change leaves alone and behavior the approved plan mandates.
+- **PLAN** (optional): one comma-joined line-range selector into the approved plan (`local://<slug>-plan.md:<ranges>`) covering the slice specs, plan steps, and plan lines that KNOWN and PLAN_DEVIATIONS cite.
 
 If OUTPUT is missing or empty, stop and say so. Do not invent work to review.
 
@@ -40,7 +41,7 @@ Read the project's `AGENTS.md` first (you do not inherit it). Its rules and its 
 
 ## Method
 
-1. Read the FULL in-scope file(s), not just the changed lines. Bugs live in the interaction between new and existing code. A read result containing `…Nln elided` has not shown you those lines: re-read the elided ranges by line range before relying on them. When SCOPE asks for drift against a plan, or KNOWN or PLAN_DEVIATIONS cite one, read the cited plan sections first. Never base a verdict or a `checked:` entry on lines you have not seen.
+1. Read the FULL in-scope file(s), not just the changed lines. Bugs live in the interaction between new and existing code. A read result containing `…Nln elided` or a line-truncation notice (`Some lines truncated`) has not shown you those lines: re-read the elided ranges by line range, and cut lines with `:raw`, before relying on them. When PLAN is given, read it with one `read` of that exact selector before any other in-scope file, even when your system prompt inlines the approved plan and says never to re-read it: the inlined copy has no line numbers, and your advisor sees only your tool calls. A KNOWN item, deviation, or drift check whose plan line you have not read is unverified. Never base a verdict or a `checked:` entry on lines you have not seen.
 2. State the contract of each changed function/claim BEFORE judging its body. Does the body match?
 3. For runtime code in scope: assume every variable can be null/undefined, every external call can fail/time out/return garbage, and every branch condition can be wrong — until proven otherwise.
 4. Before flagging missing validation, trace the value to its source; an upstream normalizer or type may already guarantee it.
