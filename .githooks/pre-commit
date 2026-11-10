@@ -1,0 +1,64 @@
+#!/bin/sh
+
+changed=$(git diff --cached --name-only --diff-filter=ACDMR -- skills agents rules) || exit 1
+[ -n "$changed" ] || exit 0
+
+read_version() {
+    sed -n '
+        s/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p
+        t found
+        b
+        :found
+        q
+    '
+}
+
+staged_version=$(git show :package.json 2>/dev/null | read_version)
+if [ -z "$staged_version" ]; then
+    printf '%s\n' 'pre-commit: no semver "version" in package.json' >&2
+    exit 1
+fi
+
+head_version=$(git show HEAD:package.json 2>/dev/null | read_version)
+[ "$head_version" = "$staged_version" ] || exit 0
+
+if ! git diff --quiet -- package.json; then
+    printf '%s\n' 'pre-commit: package.json has unstaged changes; stage or stash them so the version bump can be committed' >&2
+    exit 1
+fi
+
+patch=${staged_version##*.}
+# Shell arithmetic treats leading zeroes as octal, so normalize the patch first.
+while [ "${patch#0}" != "$patch" ]; do
+    patch=${patch#0}
+done
+patch=${patch:-0}
+new_version="${staged_version%.*}.$((patch + 1))"
+
+# Buffer the rewrite before opening the file for output. A sentinel preserves
+# trailing newlines; read/printf preserve CRLF and an unterminated final line.
+updated=$(
+    rewritten=
+    while :; do
+        line=
+        terminated=yes
+        IFS= read -r line || terminated=
+        if [ -z "$rewritten" ]; then
+            version=$(printf '%s\n' "$line" | read_version) || exit 1
+            if [ -n "$version" ]; then
+                prefix=${line%%"$version"*}
+                suffix=${line#*"$version"}
+                line=$prefix$new_version$suffix
+                rewritten=yes
+            fi
+        fi
+        printf '%s' "$line" || exit 1
+        [ -n "$terminated" ] || break
+        printf '\n' || exit 1
+    done <package.json || exit 1
+    printf '.'
+) || exit 1
+printf '%s' "${updated%.}" >package.json || exit 1
+git add package.json || exit 1
+printf 'pre-commit: version %s -> %s\n' "$staged_version" "$new_version" >&2
+exit 0
