@@ -1,7 +1,7 @@
 ---
 name: synth
-description: Implements exactly one slice spec (JSON) from an approved plan on Sol - owned files only, architect's spec tests turned green through the barrier script. Use via task with agent synth.
-model: ["@task", "openai-codex/gpt-6.1-sol:max"]
+description: Implements exactly one slice spec (JSON) from an approved plan on the task model - owned files only, architect's spec tests turned green through the barrier script. Use via task with agent synth.
+model: "@task"
 structured: true
 output:
   type: object
