@@ -187,6 +187,46 @@ class PreflightTest(unittest.TestCase):
         self.assertTrue(details[0].startswith("src/use00.ts references `add`"))
         self.assertEqual(details[-1], "... and 2 more files reference add")
 
+    def test_wide_slice_needs_split_or_coupling(self):
+        paths = [f"src/w{index}.ts" for index in range(4)]
+        for path in paths:
+            self.write(path, "export const x = 1;\n")
+        code, report = self.run_preflight(plan_text([slice_spec(owns=paths)]))
+        self.assertEqual((code, report["verdict"], self.codes(report), report["slices"]), (1, "fail", ["WIDE_SLICE"], 1))
+        diag = report["diagnostics"][0]
+        self.assertEqual(diag["slice"], "S1")
+        self.assertIn("owns 4 files", diag["detail"])
+        self.assertIn("3 or fewer", diag["detail"])
+        self.assertIn('"coupling"', diag["detail"])
+        code, report = self.run_preflight(plan_text([slice_spec(owns=paths[:3])]))
+        self.assertEqual((code, report["diagnostics"]), (0, []))
+        coupled = slice_spec(owns=paths)
+        coupled["coupling"] = "one schema and its three generated readers"
+        code, report = self.run_preflight(plan_text([coupled]))
+        self.assertEqual((code, report["diagnostics"]), (0, []))
+
+    def test_wide_slice_counts_new_paths_and_keeps_other_checks(self):
+        owns = ["[NEW] src/n1.ts", "[NEW] src/n2.ts", "[NEW] src/n3.ts", "src/a.ts", "src/missing.ts"]
+        code, report = self.run_preflight(plan_text([slice_spec(owns=owns)]))
+        self.assertEqual((code, self.codes(report)), (1, ["WIDE_SLICE", "PATH_MISSING"]))
+        self.assertIn("owns 5 files", report["diagnostics"][0]["detail"])
+
+    def test_blank_or_non_string_coupling_does_not_excuse_wide_slice(self):
+        paths = [f"src/w{index}.ts" for index in range(4)]
+        for path in paths:
+            self.write(path, "export const x = 1;\n")
+        for value, expected, valid in (("   ", ["WIDE_SLICE"], 1), (7, ["BAD_SPEC"], 0)):
+            with self.subTest(coupling=value):
+                spec = slice_spec(owns=paths)
+                spec["coupling"] = value
+                code, report = self.run_preflight(plan_text([spec]))
+                self.assertEqual((code, self.codes(report), report["slices"]), (1, expected, valid))
+        narrow = slice_spec(owns=paths[:2])
+        narrow["coupling"] = 7
+        code, report = self.run_preflight(plan_text([narrow]))
+        self.assertEqual((code, self.codes(report)), (1, ["BAD_SPEC"]))
+        self.assertIn("coupling must be a string", report["diagnostics"][0]["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

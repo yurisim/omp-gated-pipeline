@@ -17,10 +17,11 @@ Copy the command as written: bash expands `~`, but `%USERPROFILE%` is passed thr
 
 | Code | Fails when |
 | --- | --- |
-| `BAD_SPEC` | no `## Parallel waves` section, no slice arrays under it (unless the section has a `Serial:` line and an `Acceptance:` line, the JSON-free serial form), a JSON-free `Serial:` section with no `Acceptance:` line, invalid JSON in a wave block, a slice missing or mistyping `id`/`agent`/`owns`/`reads`/`symbols`/`invariants`/`tests`/`acceptance`, or a duplicate id |
+| `BAD_SPEC` | no `## Parallel waves` section, no slice arrays under it (unless the section has a `Serial:` line and an `Acceptance:` line, the JSON-free serial form), a JSON-free `Serial:` section with no `Acceptance:` line, invalid JSON in a wave block, a slice missing or mistyping `id`/`agent`/`owns`/`reads`/`symbols`/`invariants`/`tests`/`acceptance`, a `coupling` value that is not a string, or a duplicate id |
 | `PATH_MISSING` | an untagged `owns`/`reads`/`symbols[].path` entry does not exist |
 | `SYMBOL_MISSING` | a segment of an untagged symbol `name` (split on `.`, `#`, `:`) does not appear as a word in its file |
 | `UNLISTED_CALLER` | a symbol's `signature` is not in its file verbatim (whitespace-normalized), so the plan changes it, and a file referencing its last name segment (`git grep -w`) is in no slice's `owns`, `reads`, `symbols[].path`, or `tests` file |
+| `WIDE_SLICE` | a slice's `owns` has 4 or more entries (files, directories, and `[NEW]` paths each count as one) and the slice has no non-blank `coupling` string; split it into slices of 3 or fewer files or add the one-line reason |
 
 ## Tagging
 

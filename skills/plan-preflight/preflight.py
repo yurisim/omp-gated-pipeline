@@ -21,6 +21,7 @@ PRUNED_DIRS = {
     "__pycache__", ".scratch", ".nx", ".angular", "coverage",
 }
 AUTOSAVED_PLANS_DIR = Path(".omp/plans")
+WIDE_SLICE_MIN = 4
 
 
 def diagnostic(code: str, sid: str | None, line: int | None, detail: str) -> dict[str, Any]:
@@ -172,10 +173,19 @@ def validate_slices(
             errors.append("symbols must be a list of objects with string path, name, and signature")
         if not isinstance(spec.get("invariants"), list):
             errors.append("invariants must be a list")
+        coupling = spec.get("coupling", "")
+        if not isinstance(coupling, str):
+            errors.append("coupling must be a string")
         if errors:
             diagnostics.append(diagnostic("BAD_SPEC", sid if usable_id else "?", line, "; ".join(errors)))
         else:
             valid.append((spec, line))
+            if len(spec["owns"]) >= WIDE_SLICE_MIN and not coupling.strip():
+                diagnostics.append(diagnostic(
+                    "WIDE_SLICE", sid, line,
+                    f'owns {len(spec["owns"])} files; split it into slices of {WIDE_SLICE_MIN - 1} or fewer files, '
+                    'or add "coupling": "<why these files must change in one slice>"',
+                ))
     return valid, diagnostics
 
 

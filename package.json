@@ -1,6 +1,6 @@
 {
   "name": "omp-gated-pipeline",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "description": "Gated plan pipeline for omp: deterministic plan preflight, synth feasibility gate, barrier fan-out, adversarial diff audit.",
   "omp": {}
