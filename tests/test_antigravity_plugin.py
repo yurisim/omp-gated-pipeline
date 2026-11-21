@@ -124,6 +124,25 @@ class AntigravityPluginTest(unittest.TestCase):
         preflight_ag = (ROOT / "skills" / "plan-preflight" / "antigravity.md").read_text(encoding="utf-8")
         self.assertIn("preflight.py", preflight_ag)
 
+    def test_quota_fallback_documented(self):
+        fanout_ag = (ROOT / "skills" / "parallel-fanout" / "antigravity.md").read_text(encoding="utf-8")
+        review_ag = (ROOT / "skills" / "adversarial-review" / "antigravity.md").read_text(encoding="utf-8")
+
+        for text in (fanout_ag, review_ag):
+            self.assertIn("RESOURCE_EXHAUSTED", text)
+            self.assertIn("429", text)
+            self.assertIn("quota_remaining", text)
+            self.assertIn("quota_resets", text)
+            self.assertIn("ask_question", text)
+            self.assertRegex(text, r'swarm\{action:\s*"models"')
+            self.assertRegex(text, r'swarm\{action:\s*"add"')
+            self.assertRegex(text, r'swarm\{action:\s*"kill"')
+
+        self.assertIn("OWNERS", fanout_ag)
+        self.assertIn("planDeviations", fanout_ag)
+        self.assertIn("never fall back to inline coordinator edits", fanout_ag)
+        self.assertIn("different family/line", review_ag)
+
 
 class AntigravityHookTest(unittest.TestCase):
     """Validates hooks.json and the plan-preflight PreToolUse hook."""
