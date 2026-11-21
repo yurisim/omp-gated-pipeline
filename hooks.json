@@ -1,0 +1,16 @@
+{
+  "plan-preflight-gate": {
+    "PreToolUse": [
+      {
+        "matcher": "write_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python tools/antigravity_preflight_hook.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

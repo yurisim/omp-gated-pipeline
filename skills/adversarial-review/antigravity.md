@@ -26,4 +26,5 @@ Invoke it with `invoke_subagent` (`TypeName: "adversarial-reviewer"`), passing t
 Because `invoke_subagent` exposes tiers (`"inherit"`, `"flash_lite"`, `"flash"`, `"pro"`) rather than cross-family `modelRoles`:
 - If implementation slices ran on `"flash"`, run the reviewer on `Model: "pro"` (or `"inherit"` if the coordinator is on a larger tier).
 - If the coordinator/author ran on `"pro"` (or `"inherit"`), run the reviewer on `Model: "flash"` (or `"pro"` for critical security/architecture reviews where depth matters more than tier separation).
-- When both coordinator-written files (wave-0 spec tests, inline edits, `sonic` text) and `synth`-written files exist, either spawn two reviewers in parallel (each scoped to its own `artifacts:` and the same `OUTPUT` patch) or one reviewer covering the combined scope.
+- When both coordinator-written files (wave-0 spec tests, inline edits, `sonic` text) and `synth`-written files exist, run one reviewer covering the combined scope (tiers stay in one model family, so two reviewers add cost without cross-family separation).
+- When the user is already running `/swarm`, pin the reviewer worker to a different model family than the author with `swarm{action: "add", model: ...}` for true cross-family review. Never invoke `swarm` unasked.

@@ -43,15 +43,15 @@ Measure pipeline runs:
 
 The repository root includes `plugin.json`, so Antigravity can load the same `skills/` and `rules/` directly (each skill pairs its OMP `SKILL.md` with an `antigravity.md` runtime adapter).
 
-1. **Full plugin (recommended — loads both `rules/` and `skills/`):** clone the repo and either link it into `~/.gemini/config/plugins/omp-gated-pipeline` (symlink on Unix/macOS, or directory junction on Windows PowerShell: `New-Item -ItemType Junction -Path "$HOME\.gemini\config\plugins\omp-gated-pipeline" -Target "<repo-path>"`), or register it in `~/.gemini/config/plugins.json` using an absolute or `~/...` home-relative path:
+1. **Full plugin (recommended — loads `rules/`, `skills/` and `hooks.json`):** clone the repo and register its parent directory in `~/.gemini/config/plugins.json` with an **absolute** path (verified on Windows; a Windows directory junction under `~/.gemini/config/plugins/` is seen by `agy plugin list` but not loaded by the Antigravity language server, and a `~/...` path did not load):
 
        {
          "entries": [
-           { "path": "~/projects", "include_only": ["omp-gated-pipeline"] }
+           { "path": "C:/Users/<you>/projects", "include_only": ["omp-gated-pipeline"] }
          ]
        }
 
-   Note: `agy plugin validate .` loads `skills: 3` and `rules: 1` while skipping OMP's `agents/*.md` files (which Antigravity registers at runtime via `define_subagent`).
+   Note: `agy plugin validate .` loads `skills: 3`, `rules: 1` and `hooks: 1` while skipping OMP's `agents/*.md` files (which Antigravity registers at runtime via `define_subagent`). `hooks.json` runs `tools/antigravity_preflight_hook.py`, which denies a `write_file` of a plan (`implementation_plan.md` or `*-plan.md` with `## Parallel waves`) when plan-preflight fails.
 
 2. **Skills only (no always-on rule):** register the `skills/` directory in `~/.gemini/config/skills.json`:
 

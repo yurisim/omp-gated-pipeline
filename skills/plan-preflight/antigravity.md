@@ -12,6 +12,12 @@ python "<skill-dir>/preflight.py" "<plan-file.md>"
 
 `-` (stdin) and `--root <dir>` work as documented in `SKILL.md`.
 
+## Read-only Plan/Execute turns
+
+Plan/Execute turns block `write_file`, so a plan may exist only inline. Pipe it to `preflight.py -` on stdin (`@'<plan text>'@ | python "<skill-dir>/preflight.py" -`), or run `preflight.py` at the start of the execution turn before Wave 1.
+
+The plugin's root `hooks.json` also runs `preflight.py` automatically before `write_file` saves `implementation_plan.md` or `*-plan.md` containing `## Parallel waves`, and denies the write on `fail`.
+
 ## Tool & path mapping
 
 | OMP (`SKILL.md`) | Antigravity |

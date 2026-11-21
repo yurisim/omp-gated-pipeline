@@ -2,6 +2,8 @@
 
 import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -121,6 +123,57 @@ class AntigravityPluginTest(unittest.TestCase):
 
         preflight_ag = (ROOT / "skills" / "plan-preflight" / "antigravity.md").read_text(encoding="utf-8")
         self.assertIn("preflight.py", preflight_ag)
+
+
+class AntigravityHookTest(unittest.TestCase):
+    """Validates hooks.json and the plan-preflight PreToolUse hook."""
+
+    HOOK = ROOT / "tools" / "antigravity_preflight_hook.py"
+
+    def run_hook(self, stdin_text):
+        result = subprocess.run(
+            [sys.executable, str(self.HOOK)], input=stdin_text,
+            capture_output=True, text=True, encoding="utf-8", timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def payload(self, path, content, root, **extra):
+        args = {"Path": path, "Content": content}
+        args.update(extra)
+        return json.dumps({
+            "toolCall": {"name": "write_file", "args": args},
+            "cwd": str(root),
+        })
+
+    def test_hooks_json(self):
+        data = json.loads((ROOT / "hooks.json").read_text(encoding="utf-8"))
+        groups = data["plan-preflight-gate"]["PreToolUse"]
+        self.assertEqual(groups[0]["matcher"], "write_file")
+        self.assertIn("antigravity_preflight_hook.py", groups[0]["hooks"][0]["command"])
+        self.assertTrue(self.HOOK.is_file())
+
+    def test_non_plan_file_allowed(self):
+        out = self.run_hook(self.payload("notes.md", "## Parallel waves\nnothing", ROOT))
+        self.assertEqual(out["decision"], "allow")
+
+    def test_valid_plan_allowed(self):
+        plan = "## Parallel waves\n\nSerial: one file\nAcceptance: python -c pass\n"
+        out = self.run_hook(self.payload("implementation_plan.md", plan, ROOT))
+        self.assertEqual(out["decision"], "allow")
+
+    def test_broken_plan_denied(self):
+        slice_spec = [{
+            "id": "S1", "agent": "synth", "owns": ["no/such/file.py"], "reads": [],
+            "symbols": [], "invariants": [], "tests": [], "acceptance": "x",
+        }]
+        plan = "## Parallel waves\n\n```json\n" + json.dumps(slice_spec) + "\n```\n"
+        out = self.run_hook(self.payload("x-plan.md", plan, ROOT))
+        self.assertEqual(out["decision"], "deny")
+        self.assertIn("PATH_MISSING", out["reason"])
+
+    def test_malformed_stdin_fails_open(self):
+        self.assertEqual(self.run_hook("not json")["decision"], "allow")
 
 
 if __name__ == "__main__":
