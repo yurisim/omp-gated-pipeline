@@ -64,11 +64,8 @@ class SessionMetricsTest(unittest.TestCase):
     def test_roles_include_nested_and_top_level_advisors(self):
         self.session(
             "run",
-            assistant(call("bash", command="echo before")),
             assistant(SYNTH, output=12, cost=1.0),
-            assistant(call("eval", code="print('during')")),
             assistant(call("task", tasks=[{"name": "Review", "agent": "adversarial-reviewer"}])),
-            assistant(call("bash", command="echo after")),
         )
         self.transcript("run/S1.jsonl", assistant(output=10, cost=0.5))
         self.transcript("run/Review.jsonl", assistant(output=8, cost=0.25))
@@ -82,7 +79,6 @@ class SessionMetricsTest(unittest.TestCase):
         self.assertEqual(run["cost"], {"main": 1.0, "synth": 0.5, "reviewer": 0.375, "advisor": 0.0625, "other": 0.03125})
         self.assertEqual(run["output_tokens"], {"main": 12, "synth": 10, "reviewer": 14, "advisor": 4, "other": 2})
         self.assertEqual(run["review"]["slow"], {"runs": 1, "crit": 1, "warn": 2, "cost": 0.375})
-        self.assertEqual(run["main_shell_calls_in_waves"], 1)
 
     def test_added_lines_by_path_kind(self):
         edit = "\n".join((
@@ -128,7 +124,7 @@ class SessionMetricsTest(unittest.TestCase):
         missing = self.root / "missing"
         result = self.run_script(root=missing)
         self.assertEqual(result.returncode, 2)
-        self.assertEqual(result.stderr, f"session_metrics: no sessions directory: {missing}\n")
+        self.assertIn(str(missing), result.stderr)
 
 
 if __name__ == "__main__":

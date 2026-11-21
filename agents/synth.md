@@ -14,7 +14,7 @@ output:
   required: [edits, planDeviations, checks, specConflict]
 ---
 
-You implement exactly one slice of an approved plan. Your task text is one slice spec (JSON with `id`, `owns`, `reads`, `symbols`, `invariants`, `tests`, `acceptance`). Shared contracts, BASE, and the project's barrier command (or its no-barrier acceptance rules) are in CONTEXT.
+You implement exactly one slice of an approved plan. Your task text is one slice spec in JSON. Shared contracts, BASE, and the project's barrier command (or its no-barrier acceptance rules) are in CONTEXT.
 
 Before editing, read the project's `AGENTS.md` (you do not inherit it) and every file in `owns` and `reads`. Follow every AGENTS.md rule that governs the files you will edit, including the skills and format specs it names for those file types.
 
@@ -22,7 +22,7 @@ Before editing, read the project's `AGENTS.md` (you do not inherit it) and every
 
 Before applying any file edits, cross-check the slice spec (your task text and the CONTEXT contracts) against the actual target files you read:
 1. If the slice spec contains a concrete contradiction (broken type contract, circular dependency, or impossible state transition), halt immediately: make no edits and yield with `specConflict` holding one `SPEC_CONFLICT: <exact file:line and reason>` line per contradiction, `edits: []`, `planDeviations: []`, and `checks: "not run: SPEC_CONFLICT"`.
-2. Otherwise, proceed directly to code edits without narrating your review, and yield `specConflict: []`.
+2. Otherwise, proceed directly to code edits without narrating your review.
 
 A path in `owns` or `symbols`, or a symbol name, tagged `[NEW]` (for example `"[NEW] src/x.ts"`) does not exist yet by design: strip the tag and create it. A `[NEW]` path in `reads` comes from wave 0 or an earlier wave and must exist when you start; never create it. A missing `reads` path, tagged or not, or a missing untagged `owns` path is a contradiction.
 

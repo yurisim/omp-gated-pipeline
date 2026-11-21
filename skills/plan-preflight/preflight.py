@@ -6,7 +6,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -275,7 +274,7 @@ def check_slices(slices: list[tuple[dict[str, Any], int]], root: Path) -> list[d
             target = resolve(path)
             if not target.exists():
                 continue
-            segments = [piece.split("(", 1)[0] for piece in re.split(r"::|[.#:]+", name)]
+            segments = [piece.split("(", 1)[0] for piece in re.split(r"[.#:]+", name)]
             segments = [segment for segment in segments if segment]
             if target not in file_text:
                 try:
@@ -305,7 +304,7 @@ def check_slices(slices: list[tuple[dict[str, Any], int]], root: Path) -> list[d
                 ref_path = resolve(ref)
                 if ref_path == target:
                     continue
-                if not any(ref_path == entry or ref_path.is_relative_to(entry) for entry in accounted):
+                if not any(ref_path.is_relative_to(entry) for entry in accounted):
                     unlisted.append(ref)
             unlisted.sort()
             for ref in unlisted[:25]:
@@ -324,7 +323,6 @@ def check_slices(slices: list[tuple[dict[str, Any], int]], root: Path) -> list[d
 
 
 def main(argv: list[str] | None = None) -> int:
-    started = time.perf_counter()
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", help="repository root (defaults to the current git root or cwd)")
@@ -344,7 +342,6 @@ def main(argv: list[str] | None = None) -> int:
         "root": root.as_posix(),
         "slices": len(slices),
         "diagnostics": diagnostics,
-        "elapsed_ms": int((time.perf_counter() - started) * 1000),
     }
     print(json.dumps(report, indent=2))
     return 1 if diagnostics else 0

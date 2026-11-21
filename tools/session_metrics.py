@@ -145,11 +145,10 @@ def _collect_main(records: Iterator[dict], header: dict) -> tuple[dict, dict[str
         "main_turns": 0, "synth_slices": 0,
         "lines": dict.fromkeys(("main_code", "main_docs", "main_scratch", "synth", "other"), 0),
         "waits": dict.fromkeys(("empty", "completed", "other"), 0),
-        "main_shell_file_writes": 0, "main_shell_file_write_lines": 0, "main_shell_calls_in_waves": 0,
+        "main_shell_file_write_lines": 0,
         "review": {variant: dict.fromkeys(("runs", "crit", "warn", "cost"), 0) for variant in REVIEW_VARIANTS.values()},
     }
     agents = {}
-    in_wave = False
     for record in records:
         if record.get("type") != "message":
             continue
@@ -166,23 +165,15 @@ def _collect_main(records: Iterator[dict], header: dict) -> tuple[dict, dict[str
             name, arguments = call["name"], call.get("arguments", {})
             if name == "task":
                 slices = 0
-                reviewing = False
                 for item in arguments.get("tasks", []):
                     agent = item.get("agent", "task")
                     if item.get("name"):
                         agents[item["name"]] = agent
                     slices += agent == "synth"
-                    reviewing |= agent.startswith("adversarial-reviewer")
-                if not run["synth_slices"] and slices:
-                    in_wave = True
-                elif reviewing:
-                    in_wave = False
                 run["synth_slices"] += slices
             elif name in ("bash", "eval"):
-                run["main_shell_calls_in_waves"] += in_wave
                 script = arguments.get("command" if name == "bash" else "code", "")
                 if SHELL_WRITE.search(script):
-                    run["main_shell_file_writes"] += 1
                     run["main_shell_file_write_lines"] += _line_count(script)
             else:
                 for kind, count in _added_lines(name, arguments):
@@ -206,20 +197,13 @@ def _collect_run(session_file: Path, since: str | None, until: str | None, proje
         return None
     _collect_agents(session_file.with_suffix(""), agents, run)
     cost_total = sum(run["cost"].values())
-    line_total = sum(run["lines"].values())
-    main_lines = sum(run["lines"][kind] for kind in ("main_code", "main_docs", "main_scratch"))
     run.update(
         cost_total=cost_total,
         main_cost_share=run["cost"]["main"] / cost_total if cost_total else 0,
         main_turns_per_slice=run["main_turns"] / run["synth_slices"],
-        main_line_share=main_lines / line_total if line_total else 0,
         small_run=run["lines"]["synth"] < 50,
     )
     return run
-
-
-def collect_run(session_file: Path) -> dict | None:
-    return _collect_run(session_file, None, None, None)
 
 
 def collect(root: Path, since: str | None = None, until: str | None = None, project: str | None = None) -> list[dict]:

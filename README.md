@@ -5,11 +5,9 @@ omp plugin package: plan → deterministic preflight (0 model tokens) → task-m
 - `rules/gated-pipeline.md`: always-apply main-session rule: when to plan, fan out, and review.
 - `skills/plan-preflight/`: `preflight.py` checks plan paths/symbols (`[NEW]` exempt) and unlisted callers of changed signatures.
 - `skills/parallel-fanout/`, `skills/adversarial-review/`: pipeline procedure.
-- `agents/synth.md` (task model; `SPEC_CONFLICT` gate), `agents/adversarial-reviewer.md` (coordinator model, task-model advisor) and `agents/adversarial-reviewer-alt.md` (task model, coordinator-model advisor), both loading `skills/adversarial-review/reviewer.md`.
+- `agents/synth.md` (task model; `SPEC_CONFLICT` gate), `agents/adversarial-reviewer.md` and `agents/adversarial-reviewer-alt.md`, both loading `skills/adversarial-review/reviewer.md`.
 
 ## Goals
-
-A secure yet fast and parallel agent architecture for omp:
 
 - **Secure:** code, script, test and build-config changes are reviewed by a model from the other family than the one that wrote them, so no model grades its own work (docs-only and typo edits skip review). Each file has one author per run, so review routing stays unambiguous.
 - **Fast:** checks that need no model run as scripts (plan preflight, barrier). The expensive coordinator model plans, gates and reviews; the cheaper task model writes most of the code.
@@ -50,7 +48,7 @@ The reviewer agents' advisor must finish its review before the reviewer returns.
       reviewMode: agent-end
       syncBacklog: strict
 
-These also apply to the main session's advisor: one synchronous review per run instead of one per turn. Do not add a `WATCHDOG.yml` advisor roster; any entry replaces the default advisor these settings configure.
+These also apply to the main session's advisor. Do not add a `WATCHDOG.yml` advisor roster; any entry replaces the default advisor these settings configure.
 
 ## Model roles
 
@@ -64,7 +62,7 @@ The package names no model, only omp model roles (`modelRoles` in `~/.omp/agent/
 | `modelRoles.task` | `synth` and `adversarial-reviewer-alt` (`model: "@task"`); generic `task` agents; advisor of `adversarial-reviewer` (`advisor: "@task"`) | task model |
 | `modelRoles.advisor` | main-session advisor | task model |
 
-Set `default`, `plan` and `slow` to one model, `task` and `advisor` to another, and keep the two groups different: each model reviews what the other wrote. If both groups resolve to the same model, every review is a same-weights self-review.
+Set `default`, `plan` and `slow` to one model, `task` and `advisor` to another, and keep the two groups different: each model reviews what the other wrote.
 
 ## Project contract
 

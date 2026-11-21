@@ -5,7 +5,7 @@ description: Main-session coordinator only; subagents never load this skill. Zer
 
 # plan-preflight
 
-Run from the repository root (stdlib Python 3.10+; no model call):
+Run from the repository root (stdlib Python 3.10+):
 
     python ~/.omp/plugins/node_modules/omp-gated-pipeline/skills/plan-preflight/preflight.py - < local://<slug>-plan.md
 
@@ -21,15 +21,15 @@ Copy the command as written: bash expands `~`, but `%USERPROFILE%` is passed thr
 | `PATH_MISSING` | an untagged `owns`/`reads`/`symbols[].path` entry does not exist |
 | `SYMBOL_MISSING` | a segment of an untagged symbol `name` (split on `.`, `#`, `:`) does not appear as a word in its file |
 | `UNLISTED_CALLER` | a symbol's `signature` is not in its file verbatim (whitespace-normalized), so the plan changes it, and a file referencing its last name segment (`git grep -w`) is in no slice's `owns`, `reads`, `symbols[].path`, or `tests` file |
-| `WIDE_SLICE` | a slice's `owns` has 4 or more entries (files, directories, and `[NEW]` paths each count as one) and the slice has no non-blank `coupling` string; split it into slices of 3 or fewer files or add the one-line reason |
+| `WIDE_SLICE` | a slice's `owns` has 4 or more entries (files, directories, and `[NEW]` paths each count as one) and the slice has no non-blank `coupling` string |
 
 ## Tagging
 
-- Paths and symbols the plan creates start with `[NEW] `: `"[NEW] src/app/x.ts"`, `"name": "[NEW] parseWave"`. A path tagged anywhere counts as new everywhere.
+- Tag what the plan creates with `[NEW] ` as skill://parallel-fanout section 1 shows. A path tagged anywhere counts as new everywhere.
 
 ## Output and handling
 
-JSON on stdout: `verdict`, `root`, `slices`, `diagnostics` (`code`, `slice`, `line`, `detail`), `elapsed_ms`. Exit 0 pass, 1 fail, 2 usage error.
+JSON on stdout: `verdict`, `root`, `slices`, `diagnostics` (`code`, `slice`, `line`, `detail`).
 
 - `pass`: proceed (propose, or spawn wave 1) with zero extra model turns. A pass with `slices: 0` is the JSON-free serial form: no path or symbol was checked.
 - `fail`: fix exactly the reported diagnostics in the plan, never the code, and rerun. After 3 failing runs, `ask` the user with the remaining diagnostics.

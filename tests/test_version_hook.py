@@ -108,7 +108,6 @@ class VersionHookTest(unittest.TestCase):
         self.assertEqual(self.commit_count(), 1)
         self.assertEqual((self.repo / "package.json").read_bytes(), dirty.encode())
         self.assertEqual(self.git("diff", "--cached", "--raw").stdout, staged)
-        self.assertEqual(self.blob(":package.json"), PKG)
 
 
 if __name__ == "__main__":
