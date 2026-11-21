@@ -5,6 +5,8 @@ description: Main-session coordinator only; subagents never load this skill. Zer
 
 # plan-preflight
 
+> Running in Antigravity? See [antigravity.md](./antigravity.md) for the script path and tool mapping.
+
 Run from the repository root (stdlib Python 3.10+):
 
     python ~/.omp/plugins/node_modules/omp-gated-pipeline/skills/plan-preflight/preflight.py - < local://<slug>-plan.md

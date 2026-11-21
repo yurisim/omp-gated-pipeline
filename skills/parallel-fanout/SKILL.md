@@ -5,6 +5,8 @@ description: "Main-session coordinator only; subagents never load this skill. Au
 
 # parallel-fanout - parallel execution skill
 
+> Running in Antigravity? Also read [antigravity.md](./antigravity.md) for tool, path, subagent, and model-tier mappings.
+
 Trigger: any task decomposable into 2+ slices. Do not wait to be asked. If work looks serial, replan it into parallel shape before executing serially. If replanning does not yield a parallel shape, execute serially.
 
 Fan when ALL hold: disjoint mutable scope per slice (files, modules, features); execution-independent within wave (no sibling output needed at runtime); shared contracts (interfaces, schemas, file ownership, no-touch zones) definable up front.
@@ -53,7 +55,7 @@ Barrier: the project's AGENTS.md pipeline section names the command (`<barrier>`
 
 ## 3. Collect and gate
 
-While slices run, do only coordinator-owned work that is already due (wave-0 review findings, files the plan leaves to the coordinator). When none is left, end the turn: each slice result and agent message starts the next turn. Never call `wait` to poll; a `wait` that returns with no finished job re-bills the whole context for nothing. Apply every `planDeviations` entry to dependent artifacts before gating.
+While slices run, do only coordinator-owned work that is already due (wave-0 review findings, files the plan leaves to the coordinator). When none is left, end the turn: each slice result and agent message starts the next turn. Never call `wait` to poll; a `wait` that returns with no finished job re-bills the whole context for nothing. Apply every `planDeviations` entry to dependent artifacts before gating. A slice result that arrives while other slices of the wave still run gets its `sonic` gate, then the turn ends with one line naming what is still running; no summary of the result. Advisor advisories (`<advisory ...>` messages) that arrive between the wave 1 spawn and the integration gate never go to a slice on their own: append each valid one to `local://<topic>-checks.md` as `ADV<n>: <owner slice id> - <what to change>`, and send each owner all of its `ADV` lines in one `write agent://<id>` message after the whole wave has returned and before the integration gate, every such call in the same response. The one exception is an advisory showing that a running slice's spec is wrong (it would make the slice fail its own gate or write outside `owns`): handle that at once as a spec conflict.
 
 Owner edits: from the wave 1 spawn until the review is spawned, every change to a file in a `synth` slice's `owns` (integration fixes, live-run fixes, user-requested tweaks) goes to that synth with `write agent://<id>`: what to change and why (the observed failure or the user's request), plus `No new tests; do not edit tests.` When fixes go to two or more owners, send one message per owner, each carrying all of that owner's fixes, with every `write agent://<id>` call in the same response; then wait for all of them to return. Synth rule 7 reruns each slice gate. Never edit those files inline, even for a one-line fix, so every file has one author family for review routing. If `write agent://<id>` fails because the agent no longer exists, `ask` the user. Files the coordinator owns (wave-0 contracts and spec tests, docs the plan leaves to the coordinator, `sonic` text) stay coordinator-edited.
 

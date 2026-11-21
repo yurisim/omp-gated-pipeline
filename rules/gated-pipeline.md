@@ -1,6 +1,7 @@
 ---
 description: Gated plan pipeline (omp-gated-pipeline) - fan-out, deterministic plan preflight, post-implementation adversarial review
 alwaysApply: true
+trigger: always_on
 agents: main
 ---
 
@@ -10,3 +11,4 @@ agents: main
 - Review: before reporting done on any change that edits code, scripts, tests, or build config, read skill://adversarial-review and run its one review pass after the repo's tests and checks have run.
 - Project specifics: the project's AGENTS.md section `Pipeline - <project> specifics` names the barrier or integration command and the project's pipeline rules. Without that section, use the no-barrier path in skill://parallel-fanout with the project's documented full check command.
 - Exempt from fan-out: questions, single-file fixes of about 30 changed lines or fewer, and debugging loops where each step depends on the previous result. Exempt from review: questions and investigations with no edits, docs-only edits, and typo/format-only changes.
+- Antigravity runtime: treat skill://<name> as the matching skill (and also read its antigravity.md), local://*-plan.md as the plan artifact, xd://propose as presenting the plan for user approval, scout as the research subagent, and task batches as parallel invoke_subagent calls.

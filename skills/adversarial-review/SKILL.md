@@ -5,6 +5,8 @@ description: Main-session coordinator only; subagents never load this skill (rev
 
 # Adversarial Review
 
+> Running in Antigravity? Also read [antigravity.md](./antigravity.md) for reviewer subagent setup, tool/path mappings, and model-tier selection.
+
 Run one review pass, scoped to what the user asked for, with reviewers whose model family did not write the work they review:
 - `adversarial-reviewer` takes the files that only task-model agents wrote (`synth`, including fixes it applied on coordinator request, or a generic `task` agent).
 - `adversarial-reviewer-alt` takes every file the coordinator or any other coordinator-model agent wrote or edited: wave-0 spec tests, inline edits (exempt single-file fixes, JSON-free serial plans, coordinator-owned or audit fixes), or text the plan gave `sonic` verbatim. Plans and answers are written by the coordinator, so they also take this agent.

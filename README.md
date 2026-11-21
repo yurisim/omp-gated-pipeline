@@ -39,6 +39,32 @@ Measure pipeline runs:
 
     python tools/session_metrics.py --since 2026-11-21 [--project <text>] [--json]
 
+## Install (Antigravity)
+
+The repository root includes `plugin.json`, so Antigravity can load the same `skills/` and `rules/` directly (each skill pairs its OMP `SKILL.md` with an `antigravity.md` runtime adapter).
+
+1. **Full plugin (recommended — loads both `rules/` and `skills/`):** clone the repo and either link it into `~/.gemini/config/plugins/omp-gated-pipeline` (symlink on Unix/macOS, or directory junction on Windows PowerShell: `New-Item -ItemType Junction -Path "$HOME\.gemini\config\plugins\omp-gated-pipeline" -Target "<repo-path>"`), or register it in `~/.gemini/config/plugins.json` using an absolute or `~/...` home-relative path:
+
+       {
+         "entries": [
+           { "path": "~/projects", "include_only": ["omp-gated-pipeline"] }
+         ]
+       }
+
+   Note: `agy plugin validate .` loads `skills: 3` and `rules: 1` while skipping OMP's `agents/*.md` files (which Antigravity registers at runtime via `define_subagent`).
+
+2. **Skills only (no always-on rule):** register the `skills/` directory in `~/.gemini/config/skills.json`:
+
+       {
+         "entries": [
+           { "path": "/path/to/omp-gated-pipeline/skills" }
+         ]
+       }
+
+3. Delete any manually copied `plan-preflight`, `parallel-fanout`, or `adversarial-review` directories under `~/.gemini/config/skills/` so they do not shadow the plugin.
+
+Antigravity does not run OMP's `agent-end` advisor hook or `modelRoles`; each skill's `antigravity.md` maps subagent creation (`define_subagent` using `agents/synth.md` and `skills/adversarial-review/reviewer.md`), parallel dispatch (`invoke_subagent`), messaging (`send_message`), user prompts (`ask_question`), and model-tier separation (`flash` vs `pro`/`inherit`, or explicit model pinning when using `/swarm`).
+
 ## Required omp settings
 
 The reviewer agents' advisor must finish its review before the reviewer returns. Set in `~/.omp/agent/config.yml`:
