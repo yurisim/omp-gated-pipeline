@@ -13,6 +13,8 @@ Use [SKILL.md](./SKILL.md) for all planning, slicing, barrier, ownership, and ga
 | `ask` | `ask_question` |
 | `scout` (planning research) | Built-in `research` subagent via parallel `invoke_subagent` calls |
 | `BASE=$(git stash create)` | On Windows PowerShell: `$BASE = git stash create; if (-not $BASE) { $BASE = git rev-parse HEAD }` |
+| `agent://<reviewer id>` or `local://` file cited in a message | For swarm workers: the board post number (`#<seq>`) of a report already posted; evidence that exists only as a file keeps its `<scratch>/<file>` path and item id. For subagents: the `<scratch>/<file>` path of the saved report |
+| Section 3 "Stall check" and "Isolated wave (trial)" | Not used here: follow "Swarm reliability" and "Workspace isolation" below |
 
 ## Swarm execution (preferred for multi-slice implementation waves)
 
