@@ -27,7 +27,10 @@ Because `invoke_subagent` exposes tiers (`"inherit"`, `"flash_lite"`, `"flash"`,
 - If implementation slices ran on `"flash"`, run the reviewer on `Model: "pro"` (or `"inherit"` if the coordinator is on a larger tier).
 - If the coordinator/author ran on `"pro"` (or `"inherit"`), run the reviewer on `Model: "flash"` (or `"pro"` for critical security/architecture reviews where depth matters more than tier separation).
 - When both coordinator-written files (wave-0 spec tests, inline edits, `sonic` text) and `synth`-written files exist, run one reviewer covering the combined scope (tiers stay in one model family, so two reviewers add cost without cross-family separation).
-- When the user is already running `/swarm`, pin the reviewer worker to a different model family than the author with `swarm{action: "add", model: ...}` for true cross-family review.
+- When the user is already running `/swarm`, you may pin the reviewer worker to a different model family/line than the author with `swarm{action: "add", model: ...}` for cross-family review, with three safeguards:
+  1. **Unmapped catalog keys**: `swarm{action: "models", all: true}` can list models whose backend key is unavailable (`unknown model key ...: model not found`). If a reviewer fails on startup, kill it immediately and fall back to another verified model line or to `define_subagent` + `invoke_subagent` (`Model: "flash"`).
+  2. **Stall fallback**: If a swarm reviewer stays `working` for >3 minutes with no board post (common on large untracked greenfield file sets), kill it and run the read-only `adversarial-reviewer` subagent via `invoke_subagent` (`Model: "flash"`).
+  3. **Focused untracked scope**: For greenfield/no-git reviews, scope `artifacts:` to core logic, schemas, UI components, and tests (excluding static docs and generated output) so the reviewer finishes cleanly.
 
 ## Quota / 429 fallback
 
@@ -36,4 +39,4 @@ Outside an explicit `/swarm` invocation or the 429 fallback below, never invoke 
 When `invoke_subagent` hits `RESOURCE_EXHAUSTED` (429), or when the pipeline already fell back to `swarm` workers on 429:
 1. Call `swarm{action: "models", all: true}` to inspect `quotas` (`quota_remaining`, `quota_resets`).
 2. If every model reports `0%` `quota_remaining`, stop and call `ask_question` with the earliest `quota_resets` timestamp.
-3. Otherwise, spawn a read-only `reviewer` worker via `swarm{action: "add", name: "reviewer", model: <chosen>, workspace: "inherit"}` on a healthy non-zero-quota model from a different family/line than the implementation workers (e.g. `claude-*` > `gemini-4-argon-high` > `gemini-4-neon-high`). Pass [reviewer.md](./reviewer.md)'s absolute path in the brief and instruct the worker to read it strictly with no edits, shell commands, or subagents, post the verdict to `@coordinator`, and kill it via `swarm{action: "kill"}` after handling the verdict.
+3. Otherwise, spawn a read-only `reviewer` worker via `swarm{action: "add", name: "reviewer", model: <chosen>, workspace: "inherit"}` on a healthy non-zero-quota model from a different family/line than the implementation workers (verify startup succeeds; if a catalog model returns `model not found`, kill it and use a suffixed name like `reviewer-2` on the next healthy model line). Pass [reviewer.md](./reviewer.md)'s absolute path in the brief and instruct the worker to read it strictly with no edits, shell commands, or subagents, post the verdict to `@coordinator`, and kill it via `swarm{action: "kill"}` after handling the verdict.

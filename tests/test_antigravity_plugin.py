@@ -143,6 +143,22 @@ class AntigravityPluginTest(unittest.TestCase):
         self.assertIn("never fall back to inline coordinator edits", fanout_ag)
         self.assertIn("different family/line", review_ag)
 
+    def test_swarm_reliability_and_reviewer_fallbacks(self):
+        fanout_ag = (ROOT / "skills" / "parallel-fanout" / "antigravity.md").read_text(encoding="utf-8")
+        review_ag = (ROOT / "skills" / "adversarial-review" / "antigravity.md").read_text(encoding="utf-8")
+
+        self.assertIn("Swarm reliability", fanout_ag)
+        self.assertIn("post_message", fanout_ag)
+        self.assertIn("@coordinator", fanout_ag)
+        self.assertIn("swarm_wait", fanout_ag)
+        self.assertIn("DurationSeconds: 180", fanout_ag)
+        self.assertIn("Reserved names", fanout_ag)
+
+        self.assertIn("model not found", review_ag)
+        self.assertIn("Stall fallback", review_ag)
+        self.assertIn("Focused untracked scope", review_ag)
+        self.assertIn("reviewer-2", review_ag)
+
 
 class AntigravityHookTest(unittest.TestCase):
     """Validates hooks.json and the plan-preflight PreToolUse hook."""

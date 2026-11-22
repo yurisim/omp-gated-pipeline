@@ -36,6 +36,14 @@ For parallel `synth` waves that run builds or tests, pass `Workspace: "share"` t
 - `invoke_subagent` accepts generic tiers (`"inherit"`, `"flash_lite"`, `"flash"`, `"pro"`), not exact model IDs. Use `Model: "flash"` for `synth` slices when the coordinator runs on a larger tier, or `"inherit"` otherwise.
 - When the user explicitly invokes `/swarm`, `swarm{action: "add", model: ...}` can pin workers to exact model names (e.g. planning in one model family and executing in another).
 
+## Swarm reliability
+
+When running `/swarm` (explicitly requested or during 429 fallback):
+- **Mandatory completion post**: Every worker brief must end with: *"Before ending your turn, you MUST call `post_message` mentioning `@coordinator` — never go `waiting` silently."*
+- **Check roster before sleeping**: Before calling `swarm_wait`, check `swarm{action: "status"}`. If a worker is already `waiting` with no completion post, inspect its owned files/checks directly (or nudge it) instead of sleeping.
+- **Bounded wait**: When waiting on 2+ active swarm workers, avoid unbounded `swarm_wait` alone — pair with a one-shot watchdog (`schedule{DurationSeconds: 180, TimerCondition: "any"}`) so silently parked or stalled workers are caught automatically.
+- **Reserved names**: Killed worker names stay reserved for the swarm's lifetime; always use a fresh suffixed name (e.g. `s2-actions-2`) when replacing a failed or killed worker.
+
 ## Quota / 429 fallback
 
 Outside an explicit `/swarm` invocation or the 429 fallback below, never call `swarm`.
