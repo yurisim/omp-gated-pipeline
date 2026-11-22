@@ -63,7 +63,7 @@ The repository root includes `plugin.json`, so Antigravity can load the same `sk
 
 3. Delete any manually copied `plan-preflight`, `parallel-fanout`, or `adversarial-review` directories under `~/.gemini/config/skills/` so they do not shadow the plugin.
 
-Antigravity does not run OMP's `agent-end` advisor hook or `modelRoles`; each skill's `antigravity.md` maps subagent creation (`define_subagent` using `agents/synth.md` and `skills/adversarial-review/reviewer.md`), parallel dispatch (`invoke_subagent`), messaging (`send_message`), user prompts (`ask_question`), and model-tier separation (`flash` vs `pro`/`inherit`, or explicit model pinning when using `/swarm`).
+Antigravity does not run OMP's `agent-end` advisor hook or `modelRoles`; each skill's `antigravity.md` maps implementation waves and cross-family adversarial reviews to `swarm` workers (with `define_subagent`/`invoke_subagent` as fallback), messaging (`post_message` / `send_message`), user prompts (`ask_question`), and model pinning for cross-family review.
 
 ## Required omp settings
 
