@@ -1004,4 +1004,18 @@ describe("renderSwarmHtml", () => {
 		expect(html).toContain('aria-label="Status key"');
 		expect(html).toContain("statusGlyph");
 	});
+
+	test("renders som Vice visual tokens, fonts, brand mark, tinted pills, and reduced-motion fallbacks", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const html = renderSwarmHtml();
+		expect(html).toContain("'Space Grotesk'");
+		expect(html).toContain("--bg-dark: #0b0d17");
+		expect(html).toContain("--surface-dark: #141728");
+		expect(html).toContain("--brand-pink-dark: #ff2a85");
+		expect(html).toContain("--brand-cyan-dark: #00f0ff");
+		expect(html).toContain("color-mix(in oklab,");
+		expect(html).toContain('class="brand-mark"');
+		expect(html).toContain("backdrop-filter: blur(");
+		expect(html).toContain("@media (prefers-reduced-motion: reduce)");
+	});
 });
