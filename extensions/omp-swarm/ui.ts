@@ -370,6 +370,11 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 #graph-svg { display: block; max-inline-size: none; }
 .lane { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.25; }
 .lane-coord { fill: color-mix(in oklab, var(--brand-cyan) 10%, var(--surface)); stroke: var(--brand-cyan); }
+.lane-node { cursor: pointer; }
+.lane-node:hover .lane { stroke: var(--accent); }
+.lane-node:focus-visible .lane, .lane-node[aria-pressed="true"] .lane { stroke: var(--accent); stroke-width: 3; }
+.lane-node:focus-visible .lane { stroke-dasharray: 5 3; }
+.lane-node:focus-visible { outline: none; }
 .lane-divider { stroke: var(--border-strong); }
 .lane-label, .member-label { fill: var(--fg); font-weight: 650; }
 .lane-label { font-size: 12px; }
@@ -396,6 +401,14 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .message-edge:focus-visible .edge-line { stroke-width: 6; }
 .mention-list { max-block-size: 15rem; overflow: auto; padding: .25rem; }
 .mention-list button { text-align: start; }
+.lane-detail > * + * { margin-block-start: .45rem; }
+.lane-member-row { display: grid; gap: .25rem; padding: .36rem .7rem; }
+.lane-member-row:not(:last-child) { border-bottom: 1px solid var(--border); }
+.lane-member-row:hover { background: color-mix(in oklab, var(--surface-2) 55%, transparent); }
+.lane-member-link { font-weight: 650; }
+.lane-member-last { align-items: baseline; }
+.lane-member-last .message { flex: 1; }
+.lane-close { font-size: 1rem; line-height: 1; }
 @media (max-width: 42rem) {
 	:root { scroll-padding-block-start: 7rem; }
 	.header-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "heading status" "tabs tabs"; }
@@ -431,6 +444,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	.edge-line, .edge-wait .edge-line { stroke: CanvasText; }
 	.edge-peer .edge-line, .line-key.peer path { stroke: CanvasText; stroke-dasharray: 7 3 2 3; }
 	.marker-arrow { fill: CanvasText; }
+	.lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane { stroke: Highlight; }
 	.member-node:focus-visible rect, .member-node[aria-pressed="true"] rect,
 	.message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: Highlight; }
 }
@@ -535,7 +549,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 			</div>
 		</div>
 		<div class="graph-scroll" id="graph-scroll">
-			<svg id="graph-svg" role="group" aria-label="Swarm network: select a member or a directed arrow for details"></svg>
+			<svg id="graph-svg" role="group" aria-label="Swarm network: select a lane, member, or directed arrow for details"></svg>
 		</div>
 		<div class="legend" role="group" aria-label="Graph legend">
 			<span><i class="line-key" aria-hidden="true"></i>Message</span>
@@ -545,7 +559,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 		</div>
 		<section class="card" aria-labelledby="detail-title">
 			<h2 id="detail-title">Selected detail</h2>
-			<div id="graph-detail">Select a member or message.</div>
+			<div id="graph-detail">Select a lane, member, or message.</div>
 		</section>
 		<section id="mentions" class="card" aria-labelledby="mentions-title" hidden>
 			<h2 id="mentions-title">Mentions</h2>
@@ -852,9 +866,11 @@ function actionButton(text, activate) {
 	button.addEventListener('click', activate);
 	return button;
 }
-function messageJump(seq, text = '#' + seq) {
-	return retainedSeqs.has(seq) ? actionButton(text, () => jumpToMessage(seq))
-		: node('span', 'muted mono', '#' + seq + ' (not in Board)');
+function messageJump(seq, text = '#' + seq, focusKey) {
+	if (!retainedSeqs.has(seq)) return node('span', 'muted mono', '#' + seq + ' (not in Board)');
+	const button = actionButton(text, () => jumpToMessage(seq));
+	if (focusKey) button.dataset.key = focusKey;
+	return button;
 }
 function memberCard(member, view) {
 	const el = node('article', 'card');
@@ -881,6 +897,78 @@ function memberCard(member, view) {
 		}
 	}
 	return el;
+}
+function laneCard(lane, frame) {
+	const card = node('article', 'card lane-detail');
+	card.dataset.lane = lane.id;
+	const header = node('div', 'row between');
+	const title = node('div', 'row');
+	title.append(node('h3', '', lane.title));
+	if (lane.status) title.append(badge(lane.status));
+	const controls = node('div', 'row');
+	const close = actionButton('×', () => {
+		pendingGraphFocusKey = 'lane:' + lane.id;
+		selection = undefined;
+		renderGraph();
+	});
+	close.className = 'lane-close';
+	close.setAttribute('aria-label', 'Close lane details');
+	close.dataset.key = 'close';
+	const memberCount = lane.members.length;
+	controls.append(lane.totalCount > 0 ? progress(lane.doneCount, lane.totalCount, lane.title)
+		: node('span', 'muted', memberCount + (memberCount === 1 ? ' member' : ' members')), close);
+	header.append(title, controls);
+	card.append(header);
+
+	const detail = [lane.summary, lane.now].filter(Boolean).join(' · ');
+	if (detail) card.append(muted(detail));
+	if (lane.attentionIds.length && frame.attention?.length) {
+		const attention = node('div', 'lane-attention stack');
+		for (const item of frame.attention) {
+			if (!lane.attentionIds.includes(item.id)) continue;
+			const entry = node('div', 'card');
+			const heading = node('div', 'row');
+			const severity = item.severity === 'med' ? 'Medium' : label(item.severity);
+			heading.append(badge(item.kind, severity + ' · ' + label(item.kind)), node('strong', '', item.title));
+			const why = node('div', 'message md-inline');
+			why.append(renderInline(item.why));
+			entry.append(heading, why);
+			if (item.seq !== null) entry.append(messageJump(item.seq, 'Jump to #' + item.seq, 'jump:attention:' + item.id));
+			attention.append(entry);
+		}
+		if (attention.childElementCount) card.append(attention);
+	}
+
+	const members = node('ul', 'plain dense-list lane-members');
+	members.setAttribute('role', 'list');
+	if (!lane.members.length) members.append(node('li', 'dense-empty muted', 'No members in this lane yet.'));
+	for (const member of lane.members) {
+		const row = node('li', 'lane-member-row');
+		const top = node('div', 'row between');
+		const identity = node('div', 'row');
+		const memberKey = 'member:' + member.id;
+		const link = actionButton(mention(member.name), () => {
+			pendingGraphFocusKey = memberKey;
+			selectGraph('member', member.id);
+		});
+		link.dataset.key = memberKey;
+		link.className = 'lane-member-link';
+		const description = [member.description !== member.name ? member.description : '', member.role, member.model]
+			.filter(Boolean).join(' · ');
+		identity.append(link, node('span', 'muted', description));
+		top.append(identity, badge(member.status));
+		row.append(top);
+		if (member.lastSeq) {
+			const last = node('div', 'row lane-member-last');
+			const lastMessage = node('div', 'message md-inline');
+			lastMessage.append(renderInline(clip(member.lastMessage, 180)));
+			last.append(messageJump(member.lastSeq, undefined, 'jump:member:' + member.id), lastMessage);
+			row.append(last);
+		}
+		members.append(row);
+	}
+	card.append(members);
+	return card;
 }
 function renderAttention() {
 	const list = byId('attention-items');
@@ -1132,9 +1220,20 @@ function replayFrame() {
 	const threads = snapshot.threads.flatMap(thread => {
 		const count = counts.get(thread.id);
 		if (!visibleThreads.has(thread.id) && !count && !(thread.totalCount === 0 && thread.createdAt <= moment)) return [];
-		return [{ ...thread, status: count?.blocked ? 'blocked' : count && count.done === count.total ? 'done' : 'running' }];
+		const status = count?.blocked ? 'blocked' : count && count.done === count.total ? 'done' : 'running';
+		const now = status === 'blocked' ? 'Blocked (' + count.blocked + ')'
+			: status === 'done' ? 'Delivered ' + count.done + (count.done === 1 ? ' task' : ' tasks')
+			: count ? (count.total - count.done - count.blocked) + ' working · ' + count.done + '/' + count.total + ' done'
+			: '0/0 done';
+		return [{ ...thread, status, doneCount: count?.done ?? 0, totalCount: count?.total ?? 0, now }];
 	});
-	return { messages, members: Array.from(members.values()), threads };
+	let doneTasks = 0, totalTasks = 0;
+	for (const { done, total } of counts.values()) {
+		doneTasks += done;
+		totalTasks += total;
+	}
+	return { messages, members: Array.from(members.values()), threads, goalSummary: snapshot.goalSummary,
+		runningSummary: '', doneTasks, totalTasks, attention: [] };
 }
 
 const svgNS = 'http://www.w3.org/2000/svg';
@@ -1152,9 +1251,11 @@ function graphChoice(el, key, name, pressed, activate) {
 	el.dataset.key = key;
 	el.addEventListener('click', activate);
 	el.addEventListener('keydown', event => {
-		if (event.key !== 'Enter' && event.key !== ' ') return;
-		event.preventDefault();
-		activate();
+		if (event.key === ' ') event.preventDefault();
+		else if (event.key === 'Enter') activate();
+	});
+	el.addEventListener('keyup', event => {
+		if (event.key === ' ') activate();
 	});
 }
 const NODE_W = 180;
@@ -1186,10 +1287,18 @@ function layoutNetwork(frame) {
 		people.set(id, coordinator);
 	}
 	const coordinator = coordinators[0].id;
-	const center = { title: 'Coordinator', members: coordinators };
-	const workers = { title: 'Unassigned workers', members: [] };
-	const outside = { title: 'Other participants', members: [] };
-	const threads = new Map(frame.threads.map(thread => [thread.id, { title: thread.title, status: thread.status, members: [] }]));
+	const center = { id: 'coordinator', threadId: null, title: 'Coordinator', summary: frame.goalSummary || '',
+		status: undefined, doneCount: frame.doneTasks ?? 0, totalCount: frame.totalTasks ?? 0,
+		now: frame.runningSummary && frame.runningSummary !== 'Idle' ? frame.runningSummary : '', attentionIds: [], members: coordinators };
+	const workers = { id: 'workers', threadId: null, title: 'Unassigned workers', summary: '',
+		status: undefined, doneCount: 0, totalCount: 0, now: '', attentionIds: [], members: [] };
+	const outside = { id: 'outside', threadId: null, title: 'Other participants', summary: '',
+		status: undefined, doneCount: 0, totalCount: 0, now: '', attentionIds: [], members: [] };
+	const threads = new Map(frame.threads.map(thread => [thread.id, {
+		id: 'thread:' + thread.id, threadId: thread.id, title: thread.title, summary: thread.summary, status: thread.status,
+		doneCount: thread.doneCount ?? 0, totalCount: thread.totalCount ?? 0, now: thread.now || '',
+		attentionIds: thread.attentionIds ?? [], members: [],
+	}]));
 	for (const member of frame.members) {
 		if (member.kind !== 'main' && member.id !== coordinator) (threads.get(member.threadId) ?? workers).members.push(member);
 	}
@@ -1343,6 +1452,7 @@ function edgePath(from, to, bend, pairIndex, pairCount, corridorX) {
 	return 'M ' + x1 + ' ' + y1 + ' Q ' + cx + ' ' + cy + ' ' + x2 + ' ' + y2;
 }
 const messageLabel = message => '#' + message.seq + ' · ' + label(message.tag) + ' · ' + mention(message.from) + ' → ' + mention(message.to);
+let pendingGraphFocusKey;
 function selectGraph(kind, id) {
 	selection = { kind, id };
 	renderGraph();
@@ -1350,7 +1460,9 @@ function selectGraph(kind, id) {
 function drawNetwork(frame, layout, messages) {
 	const { lanes, points, people, coordinator, laneWidth, xMin, width, height, routes, waitRoutes } = layout;
 	const root = byId('graph-svg');
-	const oldKey = root.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;
+	const requestedKey = pendingGraphFocusKey;
+	pendingGraphFocusKey = undefined;
+	const oldKey = requestedKey ?? (root.contains(document.activeElement) ? document.activeElement.dataset.key : undefined);
 	const scroller = byId('graph-scroll');
 	const scale = Math.max(.78, Math.min(1.25, (scroller.clientWidth || width) / width));
 	root.setAttribute('viewBox', [xMin, 0, width, height].join(' '));
@@ -1378,7 +1490,7 @@ function drawNetwork(frame, layout, messages) {
 		defs.append(crop);
 		const dividerY = lane.y + LANE_HEADER_H;
 		const textY = lane.y + LANE_HEADER_H / 2 + 4;
-		const region = svg('g', { role: 'group', 'aria-label': lane.title });
+		const region = svg('g', { class: 'lane-node' });
 		region.append(
 			svg('title', {}, lane.title),
 			svg('rect', { class: index ? 'lane' : 'lane lane-coord', x: CANVAS_PAD, y: lane.y, width: laneWidth, height: lane.height, rx: 12 }),
@@ -1386,6 +1498,12 @@ function drawNetwork(frame, layout, messages) {
 			svg('text', { class: 'lane-label', x: left, y: textY, 'clip-path': 'url(#' + id + ')' }, lane.title));
 		if (lane.status) region.append(svg('text', { class: 'lane-status', x: right, y: textY,
 			'text-anchor': 'end', 'data-status': lane.status }, statusGlyph(lane.status) + ' ' + label(lane.status)));
+		const key = 'lane:' + lane.id;
+		const memberCount = lane.members.length;
+		const name = [lane.title, lane.status ? label(lane.status) : '', memberCount + (memberCount === 1 ? ' member' : ' members')]
+			.filter(Boolean).join(' · ');
+		graphChoice(region, key, name, selection?.kind === 'lane' && selection.id === lane.id, () => selectGraph('lane', lane.id));
+		if (oldKey === key) focusTarget = region;
 		regions.append(region);
 	}
 	for (const message of messages) {
@@ -1438,7 +1556,7 @@ function drawNetwork(frame, layout, messages) {
 		nodes.append(group);
 	}
 	root.replaceChildren(defs, regions, edgeTargets, arrows, nodes);
-	focusTarget?.focus({ preventScroll: true });
+	focusTarget?.focus({ preventScroll: !requestedKey });
 	if (!centered && !byId('panel-Graph').hidden) {
 		scroller.scrollLeft = Math.max(0, (width * scale - scroller.clientWidth) / 2);
 		scroller.scrollTop = 0;
@@ -1451,13 +1569,39 @@ function renderGraph() {
 	const frame = snapshot ? (followLive ? snapshot : replayFrame()) : { members: [], threads: [], messages: [] };
 	const layout = layoutNetwork(frame);
 	const member = selection?.kind === 'member' ? layout.people.get(selection.id) : undefined;
-	const messages = graphView === 'Mentions' && member ? frame.messages.filter(message => message.from === member.id || message.to === member.id) : frame.messages;
+	const lane = selection?.kind === 'lane' ? layout.lanes.find(entry => entry.id === selection.id) : undefined;
+	let messages = frame.messages;
+	if (graphView === 'Mentions') {
+		if (member) {
+			messages = messages.filter(message => message.from === member.id || message.to === member.id);
+		} else if (lane) {
+			const laneMemberIds = new Set(lane.members.map(entry => entry.id));
+			messages = messages.filter(message => laneMemberIds.has(message.from) || laneMemberIds.has(message.to));
+		}
+	}
 	drawNetwork(frame, layout, messages);
 	const message = selection?.kind === 'message' ? frame.messages.find(entry => entry.seq === selection.id) : frame.messages.at(-1);
-	byId('graph-detail').replaceChildren(member ? memberCard(member, 'graph') : message ? messageCard(message, false) : muted('Select a member or message.'));
+	const detail = byId('graph-detail');
+	const active = document.activeElement;
+	const detailKey = lane && detail.firstElementChild?.dataset.lane === lane.id && detail.contains(active)
+		? active.dataset.key : undefined;
+	const card = member ? memberCard(member, 'graph') : lane ? laneCard(lane, frame)
+		: message ? messageCard(message, false) : muted('Select a lane, member, or message.');
+	detail.replaceChildren(card);
+	if (detailKey) {
+		let focusTarget;
+		for (const button of card.querySelectorAll('button[data-key]')) {
+			if (button.dataset.key === detailKey) {
+				focusTarget = button;
+				break;
+			}
+		}
+		if (focusTarget) focusTarget.focus({ preventScroll: true });
+		else card.querySelector('.lane-close')?.focus();
+	}
 	byId('mentions').hidden = graphView !== 'Mentions';
 	if (graphView === 'Mentions') {
-		byId('mentions-title').textContent = member ? 'Mentions of ' + mention(member.name) : 'Mentions';
+		byId('mentions-title').textContent = member ? 'Mentions of ' + mention(member.name) : lane ? 'Mentions in ' + lane.title : 'Mentions';
 		const items = byId('mention-items');
 		const oldKey = items.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;
 		let focusTarget;
@@ -1466,7 +1610,7 @@ function renderGraph() {
 			const button = node('button', '', messageLabel(entry));
 			button.type = 'button';
 			button.dataset.key = String(entry.seq);
-			button.setAttribute('aria-pressed', String(!member && message?.seq === entry.seq));
+			button.setAttribute('aria-pressed', String(!member && !lane && message?.seq === entry.seq));
 			button.addEventListener('click', () => selectGraph('message', entry.seq));
 			if (button.dataset.key === oldKey) focusTarget = button;
 			items.append(button);

@@ -1,6 +1,6 @@
 {
   "name": "omp-gated-pipeline",
-  "version": "1.3.17",
+  "version": "1.3.18",
   "description": "Gated plan pipeline: deterministic plan preflight, synth feasibility gate, parallel barrier fan-out, and adversarial diff audit.",
   "repository": {
     "type": "git",

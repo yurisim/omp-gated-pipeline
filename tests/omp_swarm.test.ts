@@ -1512,4 +1512,209 @@ describe("renderSwarmHtml", () => {
 		expect(edges().map(edge => edge.seq)).toEqual(frame.messages.filter(message => message.from === COORD.id || message.to === COORD.id).map(message => message.seq));
 		expect(cards()).toEqual(networkCards);
 	});
+
+	test("selects swimlanes on click/keyboard, renders lane detail with member drill-down and close, and scopes Mentions", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const { SwarmStore } = await import(STATE);
+		const store = new SwarmStore();
+		store.registerMember(COORD);
+		const wave1Id = store.recordTaskBatch("Progressive Import", [
+			{ name: "S1", agent: "synth" },
+			{ name: "S2", agent: "synth" },
+		]);
+		store.recordTaskBatch("E2E Coverage", [{ name: "S3", agent: "synth" }]);
+		store.applyPlanLayout({
+			goal: { title: "Swarm detail test", line: "Inspect swimlane contents" },
+			tasks: { S1: "Lower analysis temp", S2: "Stream import progress" },
+			threads: [{ id: wave1Id, title: "Progressive Import", goal: "Stream import progress and lock analysis temp.", tasks: ["S1", "S2"] }],
+		});
+		store.completeMember("S1", "Completed S1 with temp override");
+		store.recordAgentMessage("S2", COORD.id, "Streaming row 12");
+		store.recordAgentMessage("S3", COORD.id, "Waiting on wave 1");
+		const frame = store.getSnapshot();
+		const wave1 = frame.threads.find(t => t.id === wave1Id)!;
+		expect(wave1).toBeDefined();
+
+		class FakeElement {
+			readonly attributes = new Map<string, string>();
+			readonly dataset: Record<string, string> = {};
+			readonly listeners = new Map<string, Array<(event?: Record<string, unknown>) => void>>();
+			readonly classes = new Set<string>();
+			readonly classList = {
+				add: (...names: string[]) => { for (const name of names) this.classes.add(name); },
+				remove: (...names: string[]) => { for (const name of names) this.classes.delete(name); },
+				contains: (name: string) => this.classes.has(name),
+			};
+			children: Array<FakeElement | string> = [];
+			id = "";
+			title = "";
+			type = "";
+			value = "1";
+			max = "1";
+			hidden = false;
+			disabled = false;
+			tabIndex = 0;
+			clientWidth = 800;
+			scrollLeft = 0;
+			scrollTop = 0;
+			dateTime = "";
+			private _text = "";
+			constructor(readonly tag: string) {}
+			get className() { return Array.from(this.classes).join(" "); }
+			set className(value: string) {
+				this.classes.clear();
+				for (const part of value.split(/\s+/).filter(Boolean)) this.classes.add(part);
+			}
+			get textContent(): string {
+				if (this.children.length) return this.children.map(c => typeof c === "string" ? c : c.textContent).join("");
+				return this._text;
+			}
+			set textContent(value: string) {
+				this.children = [];
+				this._text = String(value);
+			}
+			get childElementCount() { return this.children.filter(c => c instanceof FakeElement).length; }
+			setAttribute(name: string, value: string) {
+				this.attributes.set(name, String(value));
+				if (name === "class") this.className = String(value);
+			}
+			getAttribute(name: string) { return this.attributes.get(name) ?? null; }
+			append(...items: Array<FakeElement | string>) {
+				for (const item of items) {
+					if (item instanceof FakeElement && item.tag === "fragment") this.children.push(...item.children);
+					else this.children.push(item);
+				}
+			}
+			prepend(...items: Array<FakeElement | string>) {
+				const expanded: Array<FakeElement | string> = [];
+				for (const item of items) {
+					if (item instanceof FakeElement && item.tag === "fragment") expanded.push(...item.children);
+					else expanded.push(item);
+				}
+				this.children.unshift(...expanded);
+			}
+			replaceChildren(...items: Array<FakeElement | string>) {
+				this.children = [];
+				this.append(...items);
+			}
+			querySelectorAll() { return []; }
+			contains() { return false; }
+			focus() {}
+			addEventListener(type: string, fn: (event?: Record<string, unknown>) => void) {
+				const list = this.listeners.get(type) ?? [];
+				list.push(fn);
+				this.listeners.set(type, list);
+			}
+			trigger(type: string, event: Record<string, unknown> = {}) {
+				for (const fn of this.listeners.get(type) ?? []) fn({ preventDefault() {}, ...event });
+			}
+		}
+
+		const elements = new Map<string, FakeElement>();
+		const document = {
+			activeElement: null,
+			getElementById(id: string) {
+				if (!elements.has(id)) elements.set(id, new FakeElement(id));
+				return elements.get(id)!;
+			},
+			createElement: (tag: string) => new FakeElement(tag),
+			createElementNS: (_ns: string, tag: string) => new FakeElement(tag),
+			createDocumentFragment: () => new FakeElement("fragment"),
+			createTextNode: (text: string) => text,
+		};
+		const walk = (root: FakeElement): FakeElement[] => {
+			const out: FakeElement[] = [root];
+			for (const child of root.children) if (child instanceof FakeElement) out.push(...walk(child));
+			return out;
+		};
+
+		const script = renderSwarmHtml().match(/<script>([\s\S]*?)<\/script>/)![1];
+		const boot = script.indexOf("\nconst views =");
+		const harness = new Function("document", `${script.slice(0, boot)}
+			return {
+				render(next, opts = {}) {
+					snapshot = next;
+					retainedSeqs = new Set(next.messages.map(m => m.seq));
+					if (opts.view !== undefined) graphView = opts.view;
+					if (opts.followLive !== undefined) followLive = opts.followLive;
+					if (opts.cursor !== undefined) cursor = opts.cursor;
+					if ('selection' in opts) selection = opts.selection;
+					renderGraph();
+				},
+				getSelection() { return selection; },
+			};`)(document) as {
+				render: (next: SwarmSnapshot, opts?: Record<string, unknown>) => void;
+				getSelection: () => { kind: string; id: string | number } | undefined;
+			};
+
+		const graph = document.getElementById("graph-svg");
+		const detail = document.getElementById("graph-detail");
+		const mentionsTitle = document.getElementById("mentions-title");
+		const findLane = (id: string) => walk(graph).find(el => el.dataset.key === "lane:" + id);
+		const visibleEdgeSeqs = () => walk(graph)
+			.filter(el => el.dataset.key?.startsWith("message:"))
+			.map(el => Number(el.dataset.key.slice("message:".length)));
+
+		// 1. Initial live render: lane is a focusable button, not pressed.
+		harness.render(frame, { view: "Network", followLive: true, cursor: frame.messages.length, selection: undefined });
+		const wave1Lane = findLane("thread:" + wave1.id);
+		expect(wave1Lane).toBeDefined();
+		expect(wave1Lane!.getAttribute("role")).toBe("button");
+		expect(wave1Lane!.getAttribute("tabindex")).toBe("0");
+		expect(wave1Lane!.getAttribute("aria-pressed")).toBe("false");
+
+		// 2. Clicking the lane highlights it and renders its summary, progress, and members in #graph-detail.
+		wave1Lane!.trigger("click");
+		expect(harness.getSelection()).toEqual({ kind: "lane", id: "thread:" + wave1.id });
+		expect(findLane("thread:" + wave1.id)!.getAttribute("aria-pressed")).toBe("true");
+		expect(detail.textContent).toContain("Progressive Import");
+		expect(detail.textContent).toContain("Stream import progress and lock analysis temp.");
+		expect(detail.textContent).toContain("1/2");
+		expect(detail.textContent).toContain("@S1");
+		expect(detail.textContent).toContain("Lower analysis temp");
+		expect(detail.textContent).toContain("Completed S1 with temp override");
+		expect(detail.textContent).toContain("@S2");
+		expect(detail.textContent).toContain("Streaming row 12");
+
+		// 3. Mentions view scopes visible edges and heading to the selected lane's members.
+		harness.render(frame, { view: "Mentions" });
+		expect(mentionsTitle.textContent).toBe("Mentions in Progressive Import");
+		const wave1Seqs = frame.messages
+			.filter(m => m.from === "S1" || m.to === "S1" || m.from === "S2" || m.to === "S2")
+			.map(m => m.seq);
+		expect(visibleEdgeSeqs()).toEqual(wave1Seqs);
+
+		// 4. Clicking a member link inside the lane detail drills into that member.
+		const s1Button = walk(detail).find(el => el.tag === "button" && el.textContent === "@S1");
+		expect(s1Button).toBeDefined();
+		s1Button!.trigger("click");
+		expect(harness.getSelection()).toEqual({ kind: "member", id: "S1" });
+
+		// 5. Space key (preventDefault on keydown, activate on keyup) selects a lane, and Close clears it.
+		let prevented = false;
+		const coordLane = findLane("coordinator")!;
+		coordLane.trigger("keydown", { key: " ", preventDefault() { prevented = true; } });
+		expect(prevented).toBe(true);
+		expect(harness.getSelection()).toEqual({ kind: "member", id: "S1" });
+		coordLane.trigger("keyup", { key: " " });
+		expect(harness.getSelection()).toEqual({ kind: "lane", id: "coordinator" });
+		expect(detail.textContent).toContain("Coordinator");
+		expect(detail.textContent).toContain("Inspect swimlane contents");
+
+		const closeBtn = walk(detail).find(el => el.tag === "button" && el.getAttribute("aria-label") === "Close lane details");
+		expect(closeBtn).toBeDefined();
+		closeBtn!.trigger("click");
+		expect(harness.getSelection()).toBeUndefined();
+		expect(findLane("coordinator")!.getAttribute("aria-pressed")).toBe("false");
+
+		// 6. Replay mode shows historical progress counts rather than live counts.
+		const spawnS2Seq = frame.messages.find(m => m.tag === "spawn" && m.to === "S2")!.seq;
+		harness.render(frame, {
+			view: "Network",
+			followLive: false,
+			cursor: spawnS2Seq,
+			selection: { kind: "lane", id: "thread:" + wave1.id },
+		});
+		expect(detail.textContent).toContain("0/2");
+	});
 });
