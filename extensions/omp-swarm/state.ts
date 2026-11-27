@@ -111,6 +111,15 @@ function shortLine(text: string): string {
 	return text.trim().split(/\r?\n/, 1)[0].trimEnd().slice(0, 160);
 }
 
+function clipWords(text: string, max: number): string {
+	const cleaned = text.replace(/\s+/g, " ").trim();
+	if (cleaned.length <= max) return cleaned;
+	const limit = max - 1;
+	const boundary = cleaned.lastIndexOf(" ", limit);
+	const clipped = cleaned.slice(0, boundary >= Math.floor(max / 2) ? boundary : limit);
+	return `${clipped.replace(/[\s,;:]+$/, "")}…`;
+}
+
 export class SwarmStore implements SwarmStoreLike {
 	private goalTitle = "";
 	private goalSummary = "";
@@ -201,11 +210,29 @@ export class SwarmStore implements SwarmStoreLike {
 	}
 
 	recordTaskBatch(batchTitle: string, tasks: Array<{ name?: string; agent?: string; task?: string; description?: string }>): string {
+		const existingTitles = new Set(Array.from(this.threads.values(), entry => entry.title));
+		let title = batchTitle;
+		if (existingTitles.has(title)) {
+			const titleLimit = 48;
+			const descriptive = tasks.map(task => task.name?.trim())
+				.filter((name): name is string => !!name && !/^(?:S\d+|task-\d+)$/i.test(name));
+			const candidate = descriptive.length
+				? `${descriptive.slice(0, 3).join(", ")}${descriptive.length > 3 ? ` +${descriptive.length - 3}` : ""}`
+				: tasks.length === 1 ? tasks[0].description?.trim() : undefined;
+			if (candidate) {
+				const clipped = clipWords(candidate, titleLimit);
+				if (!existingTitles.has(clipped)) title = clipped;
+			}
+			for (let n = 2; existingTitles.has(title); n++) {
+				const suffix = ` (${n})`;
+				title = `${batchTitle.slice(0, titleLimit - suffix.length)}${suffix}`;
+			}
+		}
 		let id: string;
 		do id = `thread-${this.nextThreadId++}`;
 		while (this.threads.has(id));
 		const createdAt = Date.now();
-		this.threads.set(id, { id, title: batchTitle, createdAt, memberIds: new Set() });
+		this.threads.set(id, { id, title, createdAt, memberIds: new Set() });
 		const named = tasks.some(task => !task.name) ? new Set(tasks.map(task => task.name)) : null;
 		for (const task of tasks) {
 			let memberId = task.name;

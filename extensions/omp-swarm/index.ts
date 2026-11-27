@@ -64,24 +64,55 @@ export function describeTask(task: { name?: string; agent?: string; task?: strin
 	return clipWords(task.solutionSpace?.trim() || (text ? firstProseLine(text.split(/\r?\n/)) : ""), 64);
 }
 
+function stripRolePrefix(name: string, role: "review" | "scout"): string {
+	const prefix = role === "review"
+		? /^(?:[Aa]dversarial[-_]?)?[Rr]eview(?:er)?(?=[A-Z0-9_-])/
+		: /^[Ss]cout(?=[A-Z0-9_-])/;
+	return name.replace(prefix, "").replace(/^[-_]+/, "") || name;
+}
+
+function formatTaskNames(tasks: Task[], role?: "review" | "scout"): string {
+	const names: string[] = [];
+	let count = 0;
+	for (const task of tasks) {
+		const name = task.name?.trim();
+		if (!name) continue;
+		if (count++ < 3) names.push(role ? stripRolePrefix(name, role) : name);
+	}
+	return `${names.join(", ")}${count > 3 ? ` +${count - 3}` : ""}`;
+}
+
+function isBoilerplateGoal(title: string): boolean {
+	return /^(?:adversarial second-opinion review|(?:we are |i am )?(?:planning|investigating|exploring|working on)\b)/i.test(title);
+}
+
 export function deriveBatchTitle(input: Record<string, unknown>, tasks: Array<{ name?: string; agent?: string; task?: string; solutionSpace?: string }>): string {
 	const intent = typeof input.i === "string" ? input.i.trim() : "";
 	if (intent) return clipWords(intent, 48);
+	const role = tasks.length === 0 ? undefined
+		: tasks.every(task => /review/i.test(task.agent ?? "")) ? "review"
+		: tasks.every(task => task.agent === "scout") ? "scout" : undefined;
+	if (role) {
+		const label = role === "review" ? "Review" : "Scout";
+		const names = formatTaskNames(tasks, role);
+		if (names) return clipWords(`${label}: ${names}`, 48);
+		if (tasks.length === 1) {
+			const description = describeTask(tasks[0]);
+			return description ? clipWords(`${label}: ${description}`, 48) : label;
+		}
+	}
 	if (typeof input.context === "string") {
 		const lines = input.context.split(/\r?\n/);
-		const goal = lines.findIndex(line => /^#[ \t]+goal(?:[ \t]+#+)?$/i.test(line.trim()));
-		const title = (goal >= 0 && firstProseLine(lines, goal + 1)) || firstProseLine(lines);
-		if (title.length >= 4 && !/^adversarial second-opinion review/i.test(title)) return clipWords(title, 48);
+		const goal = lines.findIndex(line => /^#{1,3}[ \t]+goal(?:[ \t]+#+)?$/i.test(line.trim()));
+		if (goal >= 0) {
+			const title = firstProseLine(lines, goal + 1);
+			if (title.length >= 4 && !isBoilerplateGoal(title)) return clipWords(title, 48);
+		}
 	}
 	if (tasks.length === 1) return clipWords(describeTask(tasks[0]) || tasks[0].name?.trim() || "Task batch", 48);
 	if (tasks.length > 1) {
-		const names = tasks.map(task => task.name?.trim()).filter(Boolean);
-		if (names.length) {
-			const prefix = tasks.every(task => /review/i.test(task.agent ?? "")) ? "Review: "
-				: tasks.every(task => task.agent === "scout") ? "Scout: " : "";
-			const rest = names.length > 3 ? ` +${names.length - 3}` : "";
-			return clipWords(`${prefix}${names.slice(0, 3).join(", ")}${rest}`, 48);
-		}
+		const title = formatTaskNames(tasks) || describeTask(tasks[0]);
+		if (title) return clipWords(title, 48);
 	}
 	return "Task batch";
 }

@@ -395,6 +395,34 @@ describe("SwarmStore", () => {
 		store.applyPlanLayout({});
 		expect(store.getSnapshot().goalTitle).toBe("Upgrade swarm");
 	});
+
+	test("disambiguates duplicate batch titles using descriptive task names or numeric suffix", async () => {
+		const { SwarmStore } = await import(STATE);
+		const store = new SwarmStore();
+		store.recordTaskBatch("Make triage tokenBudget user-configurable", [
+			{ name: "TriageApi", agent: "synth" },
+			{ name: "TriageUi", agent: "synth" },
+		]);
+		store.recordTaskBatch("Make triage tokenBudget user-configurable", [
+			{ name: "TriageE2e", agent: "synth" },
+			{ name: "TriageDocs", agent: "sonic" },
+		]);
+		store.recordTaskBatch("Make triage tokenBudget user-configurable", [
+			{ name: "S5", agent: "synth" },
+			{ name: "S6", agent: "sonic" },
+		]);
+		store.recordTaskBatch("Make triage tokenBudget user-configurable", [
+			{ name: "S7", agent: "synth" },
+			{ name: "S8", agent: "synth" },
+		]);
+		const titles = store.getSnapshot().threads.map(t => t.title);
+		expect(titles).toEqual([
+			"Make triage tokenBudget user-configurable",
+			"TriageE2e, TriageDocs",
+			"Make triage tokenBudget user-configurable (2)",
+			"Make triage tokenBudget user-configurable (3)",
+		]);
+	});
 });
 
 interface StubStore {
@@ -1070,6 +1098,45 @@ describe("ompSwarmExtension", () => {
 		}
 	});
 
+	test("ignores planning boilerplate and bare background context when deriving batch titles", async () => {
+		const { deriveBatchTitle } = await import(EXT);
+		expect(deriveBatchTitle(
+			{ context: "We are planning a change to make triage tokenBudget user-configurable." },
+			[
+				{ name: "ScoutAvasUI", agent: "scout" },
+				{ name: "ScoutApiAndTests", agent: "scout" },
+				{ name: "ScoutE2eAndDocs", agent: "scout" },
+			],
+		)).toBe("Scout: AvasUI, ApiAndTests, E2eAndDocs");
+		expect(deriveBatchTitle(
+			{ context: "Adversarial second-opinion review. OUTPUT is a patch file." },
+			[
+				{ name: "ReviewSynth", agent: "adversarial-reviewer" },
+				{ name: "ReviewAlt", agent: "adversarial-reviewer-alt" },
+			],
+		)).toBe("Review: Synth, Alt");
+		expect(deriveBatchTitle(
+			{ context: "Avas Angular app (repo root /work/avas)" },
+			[{ name: "UiCheck", solutionSpace: "verify tokenBudget UI in browser" }],
+		)).toBe("verify tokenBudget UI in browser");
+		expect(deriveBatchTitle(
+			{ context: "# Goal\nWe are planning a change to triage\n\n# Contract\n..." },
+			[{ name: "TriageApi", agent: "synth" }, { name: "TriageUi", agent: "synth" }],
+		)).toBe("TriageApi, TriageUi");
+		expect(deriveBatchTitle(
+			{ context: "Adversarial second-opinion review." },
+			[{ name: "ReviewWave0", agent: "adversarial-reviewer-alt" }],
+		)).toBe("Review: Wave0");
+		expect(deriveBatchTitle(
+			{ context: "Review it." },
+			[{ name: "Reviewer", agent: "adversarial-reviewer" }, { name: "Scouting", agent: "adversarial-reviewer-alt" }],
+		)).toBe("Review: Reviewer, Scouting");
+		expect(deriveBatchTitle(
+			{ context: "# Goal\nMake triage tokenBudget user-configurable\n" },
+			[{ name: "ScoutingReport", agent: "scout" }, { name: "ScoutDocs", agent: "scout" }],
+		)).toBe("Scout: ScoutingReport, Docs");
+	});
+
 	test("ompSwarmExtension auto-stops on idle and restarts on next 3+ task fanout", async () => {
 		const { default: ompSwarmExtension, DEFAULT_IDLE_TIMEOUT_MS } = await import(EXT);
 		expect(DEFAULT_IDLE_TIMEOUT_MS).toBe(300_000);
@@ -1229,5 +1296,15 @@ describe("renderSwarmHtml", () => {
 		expect(html).toContain("function renderInline(");
 		expect(html).toContain("table-wrapper");
 		expect(html).not.toContain("innerHTML");
+	});
+
+	test("wraps hive cell titles onto two lines and renders wider chips with member descriptions", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const html = renderSwarmHtml();
+		expect(html).toContain("function wrapLines(");
+		expect(html).toContain("svg('tspan'");
+		expect(html).toContain(".member-desc");
+		expect(html).toContain("const NODE_W = 168;");
+		expect(html).toContain("clip(name, 22)");
 	});
 });

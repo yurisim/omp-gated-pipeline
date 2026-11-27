@@ -369,6 +369,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .cell-label, .member-label { fill: var(--fg); font-weight: 650; }
 .cell-label { font-size: 12px; }
 .member-label { font-size: 11px; }
+.member-desc { fill: var(--muted); font-size: 9.5px; }
 .cell-status, .member-status { color: var(--muted); fill: currentColor; font-size: 10px; }
 .cell-status[data-status="done"], .member-status:is([data-status="done"], [data-status="active"]) { color: var(--ok); }
 .cell-status[data-status="running"], .member-status[data-status="working"] { color: var(--info); }
@@ -419,7 +420,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	[role="tab"][aria-selected="true"], button[aria-pressed="true"] { border-color: Highlight; }
 	progress { appearance: auto; }
 	.cell, .member-node rect { fill: Canvas; stroke: CanvasText; }
-	.cell-label, .member-label, .cell-status, .member-status { fill: CanvasText; }
+	.cell-label, .member-label, .member-desc, .cell-status, .member-status { fill: CanvasText; }
 	.edge-line, .edge-spawn .edge-line, .edge-wait .edge-line { stroke: CanvasText; }
 	.marker-arrow { fill: CanvasText; }
 	.member-node:focus-visible rect, .member-node[aria-pressed="true"] rect,
@@ -1148,8 +1149,8 @@ function graphChoice(el, key, name, pressed, activate) {
 	});
 }
 const ROOT3 = Math.sqrt(3);
-const NODE_W = 126;
-const NODE_H = 52;
+const NODE_W = 168;
+const NODE_H = 58;
 const COLUMN_W = NODE_W + 10;
 const ROW_H = NODE_H + 10;
 function* hexSlots() {
@@ -1167,6 +1168,27 @@ function* hexSlots() {
 }
 function clip(text, length) {
 	return text.length <= length ? text : Array.from(text).slice(0, length - 1).join('') + '…';
+}
+function wrapLines(text, maxPerLine, maxLines) {
+	const chars = Array.from(text.trim().replace(/\s+/g, ' '));
+	const lines = [];
+	let start = 0;
+	while (start < chars.length && lines.length < maxLines) {
+		const limit = start + maxPerLine;
+		if (limit >= chars.length) {
+			lines.push(chars.slice(start).join(''));
+			break;
+		}
+		if (lines.length === maxLines - 1) {
+			lines.push(clip(chars.slice(start, limit + 1).join(''), maxPerLine));
+			break;
+		}
+		const space = chars.lastIndexOf(' ', limit);
+		const end = space > start ? space : limit;
+		lines.push(chars.slice(start, end).join(''));
+		start = end + (chars[end] === ' ' ? 1 : 0);
+	}
+	return lines;
 }
 function layoutHive(frame) {
 	const people = new Map(frame.members.map(member => [member.id, member]));
@@ -1195,13 +1217,13 @@ function layoutHive(frame) {
 	const cells = [center, ...threads.values()];
 	if (workers.members.length) cells.push(workers);
 	if (outside.members.length) cells.push(outside);
-	let radius = 129;
+	let radius = 142;
 	for (const cell of cells) {
 		cell.columns = Math.max(1, Math.ceil(Math.sqrt(cell.members.length / 4)));
 		cell.rows = Math.ceil(cell.members.length / cell.columns);
 		const halfWidth = cell.columns * COLUMN_W / 2;
 		const halfHeight = cell.rows * ROW_H / 2;
-		radius = Math.max(radius, halfHeight + 92, halfHeight + 39 + halfWidth / ROOT3, halfWidth * 2 / ROOT3 + 20);
+		radius = Math.max(radius, halfHeight + 98, halfHeight + 44 + halfWidth / ROOT3, halfWidth * 2 / ROOT3 + 22);
 	}
 	const slots = hexSlots();
 	const points = new Map();
@@ -1270,9 +1292,21 @@ function drawHive(frame, layout, messages) {
 			return (cell.x + radius * Math.cos(angle)) + ',' + (cell.y + radius * Math.sin(angle));
 		});
 		const region = svg('g', { 'aria-label': cell.title });
-		region.append(svg('title', {}, cell.title), svg('polygon', { class: 'cell', points: vertices.join(' ') }),
-			svg('text', { x: cell.x, y: cell.y - radius + 65, class: 'cell-label', 'text-anchor': 'middle' }, clip(cell.title, 26)));
-		if (cell.status) region.append(svg('text', { x: cell.x, y: cell.y - radius + 82, class: 'cell-status',
+		const titleWidth = 24;
+		const suffixMatch = / \(\d+\)$/.exec(cell.title);
+		const suffix = suffixMatch?.index && suffixMatch[0].length < titleWidth ? suffixMatch[0] : '';
+		const titleLines = wrapLines(suffix ? cell.title.slice(0, -suffix.length) : cell.title, titleWidth, 2);
+		if (suffix && titleLines.length) {
+			const last = titleLines.length - 1;
+			titleLines[last] = clip(titleLines[last], titleWidth - suffix.length) + suffix;
+		}
+		const title = svg('text', { x: cell.x, y: cell.y - radius + (titleLines.length > 1 ? 54 : 64),
+			class: 'cell-label', 'text-anchor': 'middle' });
+		for (const [index, line] of titleLines.entries()) {
+			title.append(svg('tspan', index ? { x: cell.x, dy: 14 } : {}, line));
+		}
+		region.append(svg('title', {}, cell.title), svg('polygon', { class: 'cell', points: vertices.join(' ') }), title);
+		if (cell.status) region.append(svg('text', { x: cell.x, y: cell.y - radius + 84, class: 'cell-status',
 			'text-anchor': 'middle', 'data-status': cell.status }, statusGlyph(cell.status) + ' ' + label(cell.status)));
 		regions.append(region);
 	}
@@ -1312,10 +1346,13 @@ function drawHive(frame, layout, messages) {
 		const name = mention(member.name);
 		const status = label(member.status);
 		const title = name + ' · ' + status;
+		const description = member.description !== member.name ? member.description : '';
 		group.append(svg('title', {}, member.description ? title + ' · ' + member.description : title),
 			svg('rect', { x: x - NODE_W / 2, y: y - NODE_H / 2, width: NODE_W, height: NODE_H, rx: 8 }),
-			svg('text', { x, y: y - 3, class: 'member-label', 'text-anchor': 'middle' }, clip(name, 13)),
-			svg('text', { x, y: y + 15, class: 'member-status', 'data-status': member.status, 'text-anchor': 'middle' }, statusGlyph(member.status) + ' ' + status));
+			svg('text', { x, y: y - (description ? 11 : 3), class: 'member-label', 'text-anchor': 'middle' }, clip(name, 22)));
+		if (description) group.append(svg('text', { x, y: y + 4, class: 'member-desc', 'text-anchor': 'middle' }, clip(description, 24)));
+		group.append(svg('text', { x, y: y + (description ? 19 : 15), class: 'member-status',
+			'data-status': member.status, 'text-anchor': 'middle' }, statusGlyph(member.status) + ' ' + status));
 		const key = 'member:' + member.id;
 		graphChoice(group, key, title, selection?.kind === 'member' && selection.id === member.id, () => selectGraph('member', member.id));
 		if (oldKey === key) focusTarget = group;
