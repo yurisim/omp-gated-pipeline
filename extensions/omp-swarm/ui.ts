@@ -405,7 +405,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .lane-node:focus-visible .lane-halo, .member-node:focus-visible .member-halo { stroke-dasharray: 4 2; }
 :is(.lane-node, .member-node, .message-edge):focus-visible { outline: none; }
 .lane-label, .member-label { fill: var(--fg); font-weight: 650; }
-.lane-label { font-size: 12px; }
+.lane-label { font-size: 12px; paint-order: stroke fill; stroke: var(--dusk); stroke-width: 4px; stroke-linejoin: round; }
 .member-label { font-size: 11px; }
 .member-desc { fill: var(--muted); font-size: 9.5px; }
 .edge-line, .edge-hit { fill: none; }
@@ -467,6 +467,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	.lane-star, .member-star { fill: Canvas; stroke: CanvasText; }
 	.constellation-ring, .tree-edge { stroke: CanvasText; }
 	.star-glyph, .lane-label, .member-label, .member-desc { fill: CanvasText; }
+	.lane-label { stroke: Canvas; }
 	.edge-line, .edge-wait .edge-line { stroke: CanvasText; }
 	.edge-peer .edge-line, .line-key.peer path { stroke: CanvasText; stroke-dasharray: 7 3 2 3; }
 	.marker-arrow { fill: CanvasText; }
@@ -1300,11 +1301,15 @@ const COORD_R = 14;
 const BRANCH_R = 15;
 const MEMBER_R = 11;
 const RING_1 = 132;
-const RING_2 = 258;
 const MIN_ARC = 74;
 const LABEL_MARGIN = 148;
 const TAU = 2 * Math.PI;
 const NORTH = -Math.PI / 2;
+const SUB_REACH = 112;
+const SUB_CONE = TAU / 3;
+const LANE_LABEL_W = 190;
+// Room beside a sub-tree for its outermost workers' 22-character labels.
+const MEMBER_LABEL_W = 150;
 function clip(text, length) {
 	return text.length <= length ? text : Array.from(text).slice(0, length - 1).join('') + '…';
 }
@@ -1367,24 +1372,24 @@ function layoutConstellation(frame) {
 		points.set(coordinators[i].id, { x: 46 * Math.cos(angle), y: 46 * Math.sin(angle), r: COORD_R, depth: 1, angle });
 	}
 	const branches = lanes.slice(1);
-	const totalLeaves = branches.reduce((sum, branch) => sum + Math.max(1, branch.members.length), 0);
-	const scale = Math.max(1, totalLeaves * MIN_ARC / (TAU * RING_2));
-	const ring1 = branches.length ? RING_1 * scale : 0;
-	const ring2 = branches.some(branch => branch.members.length > 0) ? RING_2 * scale : 0;
-	const pad = branches.length ? totalLeaves / branches.length / 2 : 0;
-	const weightedLeaves = totalLeaves + pad * branches.length;
+	let sumFootprint = 0;
+	for (const branch of branches) {
+		const n = branch.members.length;
+		branch.reach = Math.max(SUB_REACH, n * MIN_ARC / SUB_CONE);
+		branch.footprint = Math.max(LANE_LABEL_W, n > 1 ? 2 * branch.reach * Math.sin(SUB_CONE / 2 * (1 - 1 / n)) + MEMBER_LABEL_W : MEMBER_LABEL_W);
+		sumFootprint += branch.footprint;
+	}
+	const ring1 = branches.length ? Math.max(RING_1, branches.length > 1 ? sumFootprint / TAU : 0) : 0;
 	const treeEdges = [];
 	let start = NORTH;
 	for (const branch of branches) {
 		const n = branch.members.length;
-		const weight = Math.max(1, n);
 		if (branches.length === 1) {
 			branch.angle = NORTH;
-			branch.span = Math.min(Math.PI * 1.5, Math.max(Math.PI * .45, weight * .42));
 		} else {
-			branch.span = TAU * (weight + pad) / weightedLeaves;
-			branch.angle = start + branch.span / 2;
-			start += branch.span;
+			const span = TAU * branch.footprint / sumFootprint;
+			branch.angle = start + span / 2;
+			start += span;
 		}
 		const cos = Math.cos(branch.angle), sin = Math.sin(branch.angle);
 		branch.x = ring1 * cos;
@@ -1392,15 +1397,11 @@ function layoutConstellation(frame) {
 		branch.r = BRANCH_R;
 		branch.depth = 1;
 		treeEdges.push('M 0 0 L ' + branch.x + ' ' + branch.y);
-		const radial = 'M ' + branch.x + ' ' + branch.y + ' L ' + (ring2 * cos) + ' ' + (ring2 * sin);
 		for (let k = 0; k < n; k++) {
-			const angle = branch.angle - branch.span / 2 + (k + .5) * branch.span / n;
-			const x = ring2 * Math.cos(angle), y = ring2 * Math.sin(angle);
+			const angle = branch.angle - SUB_CONE / 2 + (k + .5) * SUB_CONE / n;
+			const x = branch.x + branch.reach * Math.cos(angle), y = branch.y + branch.reach * Math.sin(angle);
 			points.set(branch.members[k].id, { x, y, r: MEMBER_R, depth: 2, angle });
-			let delta = angle - branch.angle;
-			if (delta <= -Math.PI) delta += TAU;
-			else if (delta > Math.PI) delta -= TAU;
-			treeEdges.push(delta ? radial + ' A ' + ring2 + ' ' + ring2 + ' 0 0 ' + Number(delta > 0) + ' ' + x + ' ' + y : radial);
+			treeEdges.push('M ' + branch.x + ' ' + branch.y + ' L ' + x + ' ' + y);
 		}
 	}
 
@@ -1418,8 +1419,8 @@ function layoutConstellation(frame) {
 	for (const member of people.values()) {
 		if (member.status === 'waiting' && member.id !== coordinator) waitRoutes.set(member.id, addRoute(member.id, coordinator));
 	}
-	const outer = (ring2 || ring1 || HUB_R) + LABEL_MARGIN;
-	return { lanes, branches, points, people, coordinator, ring1, ring2, treeEdges,
+	const outer = Math.max(HUB_R, ring1, ...[...points.values()].map(p => Math.hypot(p.x, p.y) + p.r)) + LABEL_MARGIN;
+	return { lanes, branches, points, people, coordinator, ring1, treeEdges,
 		bounds: { x: -outer, y: -outer, width: outer * 2, height: outer * 2 }, routes, waitRoutes };
 }
 function constellationEdgePath(from, to, pairIndex, pairCount) {
@@ -1568,7 +1569,7 @@ function mentionScope(layout) {
 	}
 }
 function drawConstellation(frame, layout, messages) {
-	const { lanes, points, people, coordinator, ring1, ring2, treeEdges, bounds, routes, waitRoutes } = layout;
+	const { lanes, points, people, coordinator, ring1, treeEdges, bounds, routes, waitRoutes } = layout;
 	const root = byId('graph-svg');
 	const requestedKey = pendingGraphFocusKey;
 	pendingGraphFocusKey = undefined;
@@ -1584,7 +1585,6 @@ function drawConstellation(frame, layout, messages) {
 	}
 	const rings = svg('g', { class: 'constellation-rings', 'aria-hidden': 'true' });
 	if (ring1 > 0) rings.append(svg('circle', { class: 'constellation-ring', cx: 0, cy: 0, r: ring1 }));
-	if (ring2 > 0) rings.append(svg('circle', { class: 'constellation-ring', cx: 0, cy: 0, r: ring2 }));
 	const tree = svg('g', { class: 'constellation-tree', 'aria-hidden': 'true' });
 	for (const d of treeEdges) tree.append(svg('path', { class: 'tree-edge', d }));
 	const regions = svg('g', {});
@@ -1601,7 +1601,7 @@ function drawConstellation(frame, layout, messages) {
 		const text = [clip(lane.title, 22), count].filter(Boolean).join(' · ');
 		const position = hub ? { x, y: HUB_R + 16, 'text-anchor': 'middle' } : outwardLabel(lane);
 		if (!hub) {
-			// Put the horizontal extent of the label along the orbit, not across the member ring.
+			// Put the horizontal extent of the label along the wave orbit.
 			const tangent = (lane.angle * 180 / Math.PI + 180) % 180 - 90;
 			position['text-anchor'] = 'middle';
 			position.transform = 'rotate(' + tangent + ' ' + position.x + ' ' + position.y + ')';

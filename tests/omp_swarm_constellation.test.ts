@@ -134,7 +134,7 @@ const walk = (root: FakeElement): FakeElement[] => {
 };
 
 describe("Swarm constellation UI", () => {
-	test("lays out radial depth rings, orbital tree edges, non-overlapping circular stars, and keeps star coordinates fixed in Mentions", async () => {
+	test("lays out wave sub-hubs on one inner ring with workers fanning out from their wave star, non-overlapping circular stars, and keeps star coordinates fixed in Mentions", async () => {
 		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
 		const { SwarmStore } = await import(STATE);
 		const store = new SwarmStore();
@@ -152,21 +152,19 @@ describe("Swarm constellation UI", () => {
 		const graph = document.getElementById("graph-svg");
 		const all = walk(graph);
 
-		// Concentric depth rings at origin (ring1 for threads, ring2 for workers)
+		// One ring at origin: the orbit that wave (thread) stars sit on
 		const rings = all
 			.filter(el => el.tag === "circle" && el.classList.contains("constellation-ring"))
 			.map(el => ({ cx: Number(el.getAttribute("cx")), cy: Number(el.getAttribute("cy")), r: Number(el.getAttribute("r")) }));
-		expect(rings.length).toBe(2);
-		for (const ring of rings) {
-			expect(ring.cx).toBe(0);
-			expect(ring.cy).toBe(0);
-		}
-		expect(rings[1].r).toBeGreaterThan(rings[0].r);
+		expect(rings.length).toBe(1);
+		expect(rings[0].cx).toBe(0);
+		expect(rings[0].cy).toBe(0);
+		expect(rings[0].r).toBeGreaterThan(0);
 
-		// Radial + orbital tree skeleton edges (at least one orbital arc command " A ")
+		// Straight fractal skeleton: hub -> each wave star, wave star -> each of its workers; no orbital arcs
 		const treeEdges = all.filter(el => el.tag === "path" && el.classList.contains("tree-edge"));
-		expect(treeEdges.length).toBeGreaterThanOrEqual(frame.threads.length + 6);
-		expect(treeEdges.some(el => (el.getAttribute("d") ?? "").includes(" A "))).toBe(true);
+		expect(treeEdges.length).toBe(frame.threads.length + frame.members.filter(m => m.kind !== "main").length);
+		expect(treeEdges.some(el => (el.getAttribute("d") ?? "").includes(" A "))).toBe(false);
 
 		// Member stars are circles with on-node status glyphs, no 180x60 rects, and no overlapping centers
 		const memberGroups = all.filter(el => el.dataset.key?.startsWith("member:"));
@@ -187,11 +185,11 @@ describe("Swarm constellation UI", () => {
 				glyph: glyph!.textContent.trim(),
 			};
 		});
-		// Workers orbit ring2; the coordinator sits on the hub at the origin
+		// The coordinator sits on the hub; workers sit beyond the wave ring
 		for (const star of memberStars) {
 			const radius = Math.hypot(star.cx, star.cy);
 			if (star.id === COORD.id) expect(radius).toBeCloseTo(0, 0);
-			else expect(radius).toBeCloseTo(rings[1].r, 0);
+			else expect(radius).toBeGreaterThan(rings[0].r);
 		}
 		// Status glyphs differ between statuses so color is never alone
 		const statusOf = (id: string) => frame.members.find(m => m.id === id)!.status;
@@ -218,6 +216,27 @@ describe("Swarm constellation UI", () => {
 			const glyph = walk(laneGroup).find(el => el.tag === "text" && el.classList.contains("star-glyph"));
 			expect(glyph?.getAttribute("aria-hidden")).toBe("true");
 			expect(glyph!.textContent.trim().length).toBeGreaterThan(0);
+		}
+		// Each wave is a sub-hub: all its workers sit at one shared reach from its star
+		for (const thread of frame.threads) {
+			const group = laneGroups.find(el => el.dataset.key === "lane:thread:" + thread.id)!;
+			const hub = walk(group).find(el => el.tag === "circle" && el.classList.contains("lane-star"))!;
+			const hx = Number(hub.getAttribute("cx")), hy = Number(hub.getAttribute("cy"));
+			const reaches = memberStars
+				.filter(star => frame.members.find(m => m.id === star.id)!.threadId === thread.id)
+				.map(star => Math.hypot(star.cx - hx, star.cy - hy));
+			expect(reaches.length).toBe(thread.memberIds.length);
+			for (const reach of reaches) expect(reach).toBeCloseTo(reaches[0], 0);
+			// Skeleton edges run hub -> wave star and wave star -> each of its workers
+			const segments = treeEdges.map(el => (el.getAttribute("d") ?? "").match(/-?[\d.e+-]+/g)!.map(Number));
+			const hasEdge = (ax: number, ay: number, bx: number, by: number) => segments.some(([x1, y1, x2, y2]) =>
+				Math.hypot(x1 - ax, y1 - ay) < .5 && Math.hypot(x2 - bx, y2 - by) < .5);
+			expect(hasEdge(0, 0, hx, hy)).toBe(true);
+			for (const star of memberStars) {
+				if (frame.members.find(m => m.id === star.id)!.threadId !== thread.id) continue;
+				expect(Math.hypot(star.cx, star.cy)).toBeGreaterThan(Math.hypot(hx, hy));
+				expect(hasEdge(hx, hy, star.cx, star.cy)).toBe(true);
+			}
 		}
 
 		// Network view draws every message
