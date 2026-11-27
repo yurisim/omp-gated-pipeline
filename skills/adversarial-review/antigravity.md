@@ -8,17 +8,17 @@ Use [SKILL.md](./SKILL.md) for review scoping, preparation, verdict rules, coold
 | --- | --- |
 | `local://<file>` | `<scratch>/<file>` (or `<artifact-dir>/<plan>.md` for plans) |
 | `skill://adversarial-review/reviewer.md` | `./reviewer.md` (pass its absolute path to the reviewer) |
-| `write agent://<id>` | `send_message` (`Recipient: <conversationId>`) |
+| `write agent://<id>` | For swarm workers: `post_message` mentioning `@<worker-name>` (note `post_message` may only appear once a swarm is active); for subagents: `send_message` (`Recipient: <conversationId>`) |
 | `ask` | `ask_question` |
 | `AGENTS.md` | `AGENTS.md` / `GEMINI.md` (if present) |
 
 For either runtime, pass `SCOPE`, `BASE`, `OUTPUT`, `CHECKS`, `BASELINE_CHECKS`, `PLAN`, `PLAN_DEVIATIONS`, `KNOWN`, and `INTENT`.
 
-## Cross-family review via `swarm` (preferred)
+## Cross-family review via `swarm`
 
-Prefer `swarm` so the reviewer can run on a different model family/line than the author:
-1. Call `swarm{action: "models", all: true}` and choose a healthy non-zero-quota model from a different family/line than the implementation author.
-2. Spawn a read-only worker via `swarm{action: "add", name: "reviewer", model: <chosen>, workspace: "inherit"}`. In the brief, give the absolute path to `reviewer.md`; instruct the worker to follow it strictly (no edits, shell commands, or subagents) and report via `post_message` mentioning `@coordinator` before ending its turn.
+Use `swarm` for adversarial review even when the user did not invoke `/swarm` (this skill explicitly authorizes calling `swarm`), so the reviewer can run on a different model family/line than the author:
+1. Call `swarm{action: "models", all: true}` and choose a healthy non-zero-quota model from a different family/line than the implementation author. If all other model families report `0%` `quota_remaining`, still spawn the reviewer via `swarm` on a distinct healthy model line or tier (e.g. a different Gemini line or `pro` vs `flash`) and record cross-family quota exhaustion in `planDeviations`; fall back to `define_subagent` + `invoke_subagent` only if `swarm` is unavailable, fails, or stalls.
+2. Spawn a read-only worker via `swarm{action: "add", name: "reviewer", model: <chosen>, workspace: "inherit"}`. In the brief, give the absolute path to `reviewer.md`; instruct the worker to follow it strictly (no edits, shell commands, or subagents) and report via `post_message` mentioning `@coordinator` before ending its turn. Do not bail out preemptively just because `post_message` or `swarm_wait` is not declared before calling `swarm{action: "add"}` (they may only appear once the swarm starts).
 3. Use `swarm{action: "kill"}` on startup failure, on stall, or after handling the verdict:
    - **Unmapped catalog keys**: The catalog can list unavailable backend keys (`unknown model key ...: model not found`). On startup failure, switch to another verified model line with a fresh name (e.g. `reviewer-2`) or use subagent fallback.
    - **Stall fallback**: If the reviewer stays `working` for >3 minutes without a board post, use subagent fallback.
@@ -41,4 +41,4 @@ Pass the shared fields in `Prompt` to `invoke_subagent` (`TypeName: "adversarial
 When the reviewer hits `RESOURCE_EXHAUSTED` (429):
 1. Call `swarm{action: "models", all: true}` to inspect per-model `quotas` (`quota_remaining`, `quota_resets`).
 2. If every model reports `0%` `quota_remaining`, stop and call `ask_question` with the earliest `quota_resets` timestamp.
-3. Otherwise, switch or spawn a replacement `reviewer` on a healthy non-zero-quota model from a different family/line.
+3. Otherwise, switch or spawn a replacement (using a fresh suffixed name such as `reviewer-2` if the prior worker was killed) on a healthy non-zero-quota model from a different family/line, or—if all other model families report `0%` `quota_remaining`—on a distinct healthy model line or tier and record cross-family quota exhaustion in `planDeviations`.

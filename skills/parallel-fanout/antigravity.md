@@ -9,18 +9,18 @@ Use [SKILL.md](./SKILL.md) for all planning, slicing, barrier, ownership, and ga
 | `local://<file>` | `<scratch>/<file>` (or `<artifact-dir>/<plan>.md` for plans) |
 | `skill://<name>` | Skill `<name>` (read both `SKILL.md` and `antigravity.md`) |
 | `task` batch (`tasks[]`) | Parallel `swarm` workers for implementation waves; parallel `invoke_subagent` calls for fallback, single slices, or read-only `scout` batches |
-| `write agent://<id>` | For swarm workers: `post_message` mentioning `@<worker-name>`; for subagents: `send_message` (`Recipient: <conversationId>`) |
+| `write agent://<id>` | For swarm workers: `post_message` mentioning `@<worker-name>` (note `post_message` may only appear once a swarm is active; fall back to `invoke_subagent` + `send_message` only if `swarm` or `post_message` is unavailable after starting); for subagents: `send_message` (`Recipient: <conversationId>`) |
 | `ask` | `ask_question` |
 | `scout` (planning research) | Built-in `research` subagent via parallel `invoke_subagent` calls |
 | `BASE=$(git stash create)` | On Windows PowerShell: `$BASE = git stash create; if (-not $BASE) { $BASE = git rev-parse HEAD }` |
 | `agent://<reviewer id>` or `local://` file cited in a message | For swarm workers: the board post number (`#<seq>`) of a report already posted; evidence that exists only as a file keeps its `<scratch>/<file>` path and item id. For subagents: the `<scratch>/<file>` path of the saved report |
 | Section 3 "Stall check" and "Isolated wave (trial)" | Not used here: follow "Swarm reliability" and "Workspace isolation" below |
 
-## Swarm execution (preferred for multi-slice implementation waves)
+## Swarm execution (required for 2+ slices)
 
-Prefer `swarm` for 2+ implementation slices or when model pinning or Swarm UI visibility helps.
-1. Load `swarm_pane` and set `swarm{action: "title", title: ...}` before adding workers.
-2. Spawn one worker per slice in parallel via `swarm{action: "add", name: "<slice-id-lowercase>", workspace: ...}` with the corresponding brief below; end the turn without polling.
+Use `swarm` for 2+ implementation slices even when the user did not invoke `/swarm` (this skill explicitly authorizes calling `swarm`). Fall back to `define_subagent` + `invoke_subagent` only if `swarm` is unavailable or `swarm{action: "add"}` fails; keep `invoke_subagent` for research (`scout`) batches and single-slice waves.
+1. If in an active `/swarm` session, load `swarm_pane`; otherwise skip `swarm_pane` (do not load it outside `/swarm`). Call `swarm{action: "title", title: ...}` before adding workers.
+2. Spawn one worker per slice in parallel via `swarm{action: "add", name: "<slice-id-lowercase>", workspace: ...}` with the corresponding brief below; end the turn without polling. Do not bail out preemptively just because `post_message` or `swarm_wait` is not declared before calling `swarm{action: "add"}`.
 3. Keep `OWNERS` mapped to worker roster names for owner edits. Use `swarm{action: "kill"}` on finished workers only after the final integration and adversarial-review gates pass.
 
 ## Worker briefs and subagent fallback

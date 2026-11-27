@@ -144,8 +144,12 @@ class AntigravityPluginTest(unittest.TestCase):
         self.assertIn("different family/line", review_ag)
 
     def test_swarm_reliability_and_reviewer_fallbacks(self):
+        rule_text = (ROOT / "rules" / "gated-pipeline.md").read_text(encoding="utf-8")
         fanout_ag = (ROOT / "skills" / "parallel-fanout" / "antigravity.md").read_text(encoding="utf-8")
         review_ag = (ROOT / "skills" / "adversarial-review" / "antigravity.md").read_text(encoding="utf-8")
+
+        self.assertIn("outside `/swarm`", rule_text)
+        self.assertIn("explicitly authorize calling `swarm`", rule_text)
 
         self.assertIn("Swarm reliability", fanout_ag)
         self.assertIn("post_message", fanout_ag)
@@ -153,11 +157,19 @@ class AntigravityPluginTest(unittest.TestCase):
         self.assertIn("swarm_wait", fanout_ag)
         self.assertIn("DurationSeconds: 180", fanout_ag)
         self.assertIn("Reserved names", fanout_ag)
+        self.assertIn("even when the user did not invoke `/swarm`", fanout_ag)
+        self.assertIn("do not load it outside `/swarm`", fanout_ag)
+        self.assertIn('before calling `swarm{action: "add"}`', fanout_ag)
 
         self.assertIn("model not found", review_ag)
         self.assertIn("Stall fallback", review_ag)
         self.assertIn("Focused untracked scope", review_ag)
         self.assertIn("reviewer-2", review_ag)
+        self.assertIn("even when the user did not invoke `/swarm`", review_ag)
+        self.assertIn("distinct healthy model line or tier", review_ag)
+        self.assertIn("planDeviations", review_ag)
+        self.assertIn("post_message", review_ag)
+        self.assertIn('before calling `swarm{action: "add"}`', review_ag)
 
 
 class AntigravityHookTest(unittest.TestCase):
