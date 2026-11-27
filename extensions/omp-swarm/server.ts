@@ -7,13 +7,48 @@ const privateHeaders = {
 	"X-Content-Type-Options": "nosniff",
 };
 
-export function startSwarmServer(store: SwarmStoreLike, options?: { port?: number; hostname?: string }): SwarmServerHandle {
+function isWorking(snapshot: SwarmSnapshot): boolean {
+	return snapshot.members.some(member => member.status === "working");
+}
+
+export function startSwarmServer(
+	store: SwarmStoreLike,
+	options?: { port?: number; hostname?: string; idleTimeoutMs?: number; onIdleStop?: () => void },
+): SwarmServerHandle {
 	const host = options?.hostname?.toLowerCase();
 	const hostname = !host || host === "localhost" ? "127.0.0.1" : host === "[::1]" ? "::1" : host;
 	if (hostname !== "127.0.0.1" && hostname !== "::1") throw new Error("Swarm must bind to a loopback address");
 	const urlHost = hostname === "::1" ? "[::1]" : hostname;
 	const html = renderSwarmHtml();
 	const streams = new Set<() => void>();
+	const idleTimeoutMs = options?.idleTimeoutMs;
+	const idleEnabled = typeof idleTimeoutMs === "number" && Number.isFinite(idleTimeoutMs) && idleTimeoutMs > 0;
+	let stopped = false;
+	let idleTimer: ReturnType<typeof setTimeout> | null = null;
+	let unsubscribeIdle: (() => void) | undefined;
+
+	function clearIdleTimer() {
+		if (idleTimer === null) return;
+		clearTimeout(idleTimer);
+		idleTimer = null;
+	}
+
+	function syncIdleTimer(snapshot: SwarmSnapshot) {
+		if (stopped) return;
+		if (streams.size > 0 || isWorking(snapshot)) {
+			clearIdleTimer();
+		} else if (idleTimer === null) {
+			idleTimer = setTimeout(onIdleElapsed, idleTimeoutMs);
+			idleTimer.unref?.();
+		}
+	}
+
+	function onIdleElapsed() {
+		idleTimer = null;
+		if (stopped || streams.size > 0 || isWorking(store.getSnapshot())) return;
+		handle.stop();
+		try { options?.onIdleStop?.(); } catch { /* ignore */ }
+	}
 
 	function events(signal: AbortSignal): Response {
 		let unsubscribe: (() => void) | undefined;
@@ -26,9 +61,11 @@ export function startSwarmServer(store: SwarmStoreLike, options?: { port?: numbe
 					signal.removeEventListener("abort", close);
 					// Bun may have closed the stream already when the request aborts.
 					try { controller.close(); } catch { /* already closed */ }
+					if (idleEnabled && !stopped && streams.size === 0) syncIdleTimer(store.getSnapshot());
 				}
 				cancel = close;
 				streams.add(close);
+				clearIdleTimer();
 				if (signal.aborted) {
 					close();
 					return;
@@ -109,15 +146,21 @@ export function startSwarmServer(store: SwarmStoreLike, options?: { port?: numbe
 		},
 	});
 	const port = server.port!; // This is a TCP listener, not a Unix socket.
-	let stopped = false;
-	return {
+	const handle: SwarmServerHandle = {
 		url: `http://${urlHost}:${port}`,
 		port,
 		stop() {
 			if (stopped) return;
 			stopped = true;
+			clearIdleTimer();
+			unsubscribeIdle?.();
 			for (const close of streams) close();
 			void server.stop(true);
 		},
 	};
+	if (idleEnabled) {
+		unsubscribeIdle = store.subscribe(syncIdleTimer);
+		syncIdleTimer(store.getSnapshot());
+	}
+	return handle;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test } from "bun:test";
+import { describe, expect, jest, setSystemTime, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -560,6 +560,85 @@ describe("SwarmServer", () => {
 			plain.stop();
 		}
 	});
+
+	test("SwarmServer auto-stops when idle with no working members and no SSE clients", async () => {
+		const { startSwarmServer } = await import(SERVER);
+		const workingSnap = emptySnapshot({
+			live: true,
+			members: [{ id: "S1", name: "S1", role: "synth", kind: "sub", model: "m", status: "working", threadId: null, lastMessage: "", lastSeq: 0, startedAt: T0, endedAt: null, lastActivityAt: T0, now: "Working", description: "" }],
+		});
+		const doneSnap = emptySnapshot({
+			live: false,
+			members: [{ id: "S1", name: "S1", role: "synth", kind: "sub", model: "m", status: "done", threadId: null, lastMessage: "", lastSeq: 1, startedAt: T0, endedAt: T0 + 1, lastActivityAt: T0 + 1, now: "Done", description: "" }],
+		});
+		let current = workingSnap;
+		const listeners = new Set<(s: SwarmSnapshot) => void>();
+		const store: SwarmStoreLike = {
+			getSnapshot: () => current,
+			subscribe: fn => {
+				listeners.add(fn);
+				return () => { listeners.delete(fn); };
+			},
+		};
+		const publish = (next: SwarmSnapshot) => {
+			current = next;
+			for (const fn of listeners) fn(next);
+		};
+		let idleStops = 0;
+		const handle = startSwarmServer(store, { port: 0, idleTimeoutMs: 60, onIdleStop: () => { idleStops++; } });
+		try {
+			// Working member keeps server alive past idleTimeoutMs even with zero SSE clients.
+			await Bun.sleep(90);
+			expect(idleStops).toBe(0);
+			expect((await fetch(new URL("/api/state", handle.url))).status).toBe(200);
+
+			// Connected SSE client keeps server alive even after all members finish.
+			const abort = new AbortController();
+			const events = await fetch(new URL("/api/events", handle.url), { signal: abort.signal });
+			const frames = sseFrames(events.body!);
+			expect((await frames.next()).event).toBe("snapshot");
+			publish(doneSnap);
+			expect((await frames.next()).event).toBe("update");
+			await Bun.sleep(90);
+			expect(idleStops).toBe(0);
+			expect((await fetch(new URL("/api/state", handle.url))).status).toBe(200);
+
+			// Disconnecting the last SSE client starts the idle countdown and stops the server.
+			abort.abort();
+			await frames.reader.cancel().catch(() => {});
+			// The countdown starts only at disconnect, so the server must still be up well before idleTimeoutMs.
+			await Bun.sleep(20);
+			expect(idleStops).toBe(0);
+			for (let i = 0; i < 40 && idleStops === 0; i++) await Bun.sleep(15);
+			expect(idleStops).toBe(1);
+			expect(listeners.size).toBe(0);
+			await expect(fetch(new URL("/api/state", handle.url))).rejects.toThrow();
+		} finally {
+			handle.stop();
+		}
+
+		// A server that starts idle (no workers, no SSE client, no store publication) arms the countdown at startup.
+		let startIdleStops = 0;
+		const startIdle = startSwarmServer(stubStore(doneSnap).store, { port: 0, idleTimeoutMs: 60, onIdleStop: () => { startIdleStops++; } });
+		try {
+			await Bun.sleep(20);
+			expect(startIdleStops).toBe(0);
+			for (let i = 0; i < 40 && startIdleStops === 0; i++) await Bun.sleep(15);
+			expect(startIdleStops).toBe(1);
+		} finally {
+			startIdle.stop();
+		}
+
+		// Manual stop() releases the idle subscription at once, cancels the timer, and never invokes onIdleStop.
+		let manualIdleStops = 0;
+		const manualStub = stubStore(doneSnap);
+		const manual = startSwarmServer(manualStub.store, { port: 0, idleTimeoutMs: 60, onIdleStop: () => { manualIdleStops++; } });
+		expect(manualStub.listeners.size).toBe(1);
+		manual.stop();
+		expect(manualStub.stats.unsubscribed).toBe(1);
+		await Bun.sleep(90);
+		expect(manualIdleStops).toBe(0);
+	});
 });
 
 describe("ompSwarmExtension", () => {
@@ -837,8 +916,8 @@ describe("ompSwarmExtension", () => {
 		const prevNoOpen = process.env.OMP_SWARM_NO_OPEN;
 		delete process.env.OMP_SWARM_NO_OPEN;
 		try {
-			await command.handler("reset", ctx);
 			await command.handler("stop", ctx);
+			await command.handler("reset", ctx);
 			notes.length = 0;
 			sent.length = 0;
 			opened.length = 0;
@@ -906,8 +985,8 @@ describe("ompSwarmExtension", () => {
 			await command.handler("", ctx);
 			expect(notes.some(n => n.includes(autoUrl!))).toBe(true);
 
-			await command.handler("reset", ctx);
 			await command.handler("stop", ctx);
+			await command.handler("reset", ctx);
 			notes.length = 0;
 			opened.length = 0;
 			await emit("tool_call", { toolName: "task", toolCallId: "a2", input: { tasks: [{ name: "B1" }, { name: "B2" }, { name: "B3" }] } });
@@ -933,6 +1012,8 @@ describe("ompSwarmExtension", () => {
 		expect(describeTask({ task: '{"id":"S1","owns":["[NEW] src/foo.ts"]}' })).toBe("src/foo.ts");
 		expect(describeTask({ solutionSpace: "one fix: compact header layout" })).toBe("one fix: compact header layout");
 		expect(describeTask({ task: "# Target\nCompact the swarm header" })).toBe("Compact the swarm header");
+		const clipped = deriveBatchTitle({ context: "# Goal\nomp-swarm: idle auto-stop of the in-process Swarm HTTP server, plus UI cleanup" }, [{ name: "IdleStopServer" }]);
+		expect(clipped).toBe("omp-swarm: idle auto-stop of the in-process…");
 		expect(describeTask({ name: "Empty" })).toBe("");
 
 		const handlers = new Map<string, ExtensionHandler[]>();
@@ -956,8 +1037,8 @@ describe("ompSwarmExtension", () => {
 			for (const h of handlers.get(event) ?? []) await h({ type: event, ...payload }, ctx);
 		};
 		try {
-			await command.handler("reset", ctx);
 			await command.handler("stop", ctx);
+			await command.handler("reset", ctx);
 			notes.length = 0;
 			await emit("tool_call", {
 				toolName: "task",
@@ -986,6 +1067,114 @@ describe("ompSwarmExtension", () => {
 			expect(snap.messages.some(m => m.from === "task")).toBe(false);
 		} finally {
 			await command.handler("stop", ctx);
+		}
+	});
+
+	test("ompSwarmExtension auto-stops on idle and restarts on next 3+ task fanout", async () => {
+		const { default: ompSwarmExtension, DEFAULT_IDLE_TIMEOUT_MS } = await import(EXT);
+		expect(DEFAULT_IDLE_TIMEOUT_MS).toBe(300_000);
+		const notes: string[] = [];
+		const bind = (kind: "main" | "sub", id: string, overrides: { idleTimeoutMs?: number } = { idleTimeoutMs: 60 }) => {
+			const handlers = new Map<string, ExtensionHandler[]>();
+			const commands = new Map<string, ExtensionCommand>();
+			ompSwarmExtension(
+				{
+					on: (event: string, handler: ExtensionHandler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+					registerCommand: (name: string, command: ExtensionCommand) => commands.set(name, command),
+				},
+				{ openUrl: () => false, ...overrides },
+			);
+			const ctx: ExtensionContext = {
+				cwd: ".",
+				agent: { kind, id, name: kind === "main" ? "main" : "synth", depth: kind === "main" ? 0 : 1 },
+				models: { current: () => ({ id: "m" }) },
+				ui: { notify: (message: string) => notes.push(message) },
+			};
+			const emit = async (event: string, payload: Record<string, unknown>) => {
+				for (const h of handlers.get(event) ?? []) await h({ type: event, ...payload }, ctx);
+			};
+			return { ctx, emit, command: commands.get("omp-swarm")! };
+		};
+		const lastUrl = () => [...notes].reverse().map(n => n.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]).find(Boolean);
+		const main = bind("main", "main");
+		try {
+			await main.command.handler("stop", main.ctx);
+			await main.command.handler("reset", main.ctx);
+			notes.length = 0;
+			await main.emit("session_start", {});
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i1", input: { tasks: [{ name: "W1" }, { name: "W2" }, { name: "W3" }] } });
+			const firstUrl = lastUrl();
+			expect(firstUrl).toBeDefined();
+			expect((await fetch(`${firstUrl}/api/state`)).status).toBe(200);
+
+			// Complete all three subagents; with no SSE clients, server auto-stops after idleTimeoutMs.
+			for (const id of ["W1", "W2", "W3"]) {
+				const sub = bind("sub", id);
+				await sub.emit("session_start", {});
+				await sub.emit("agent_end", { messages: [{ role: "assistant", content: [{ type: "text", text: "done" }] }] });
+			}
+			for (let i = 0; i < 40 && !notes.some(n => /auto-stopped/i.test(n)); i++) await Bun.sleep(15);
+			expect(notes.some(n => /auto-stopped/i.test(n))).toBe(true);
+			await expect(fetch(`${firstUrl}/api/state`)).rejects.toThrow();
+
+			// Restart needs autoStartThreshold (3) new tasks: none at one or two, restart at three.
+			notes.length = 0;
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i2", input: { tasks: [{ name: "W4" }] } });
+			expect(lastUrl()).toBeUndefined();
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i3", input: { tasks: [{ name: "W5" }] } });
+			expect(lastUrl()).toBeUndefined();
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i4", input: { tasks: [{ name: "W6" }] } });
+			const secondUrl = lastUrl();
+			expect(secondUrl).toBeDefined();
+			expect((await fetch(`${secondUrl}/api/state`)).status).toBe(200);
+
+			// Manual /omp-swarm stop after an idle auto-stop (before any restart) cancels restart eligibility.
+			for (const id of ["W4", "W5", "W6"]) {
+				const sub = bind("sub", id);
+				await sub.emit("session_start", {});
+				await sub.emit("agent_end", { messages: [{ role: "assistant", content: [{ type: "text", text: "done" }] }] });
+			}
+			for (let i = 0; i < 40 && !notes.some(n => /auto-stopped/i.test(n)); i++) await Bun.sleep(15);
+			expect(notes.some(n => /auto-stopped/i.test(n))).toBe(true);
+			await main.command.handler("stop", main.ctx);
+			notes.length = 0;
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i5", input: { tasks: [{ name: "W7" }, { name: "W8" }, { name: "W9" }] } });
+			expect(lastUrl()).toBeUndefined();
+
+			// Manually stopping a server left running by reset also stays stopped on a later 3-task fanout.
+			await main.command.handler("", main.ctx);
+			expect(lastUrl()).toBeDefined();
+			await main.command.handler("reset", main.ctx);
+			await main.command.handler("stop", main.ctx);
+			notes.length = 0;
+			await main.emit("tool_call", { toolName: "task", toolCallId: "i6", input: { tasks: [{ name: "W10" }, { name: "W11" }, { name: "W12" }] } });
+			expect(lastUrl()).toBeUndefined();
+		} finally {
+			await main.command.handler("stop", main.ctx);
+		}
+
+		// Without an override the extension uses DEFAULT_IDLE_TIMEOUT_MS; /omp-swarm reopens after auto-stop.
+		// Fake timers: a real 5-minute wait is impossible; Bun.serve itself is unaffected.
+		const dflt = bind("main", "main", {});
+		jest.useFakeTimers();
+		try {
+			await dflt.command.handler("stop", dflt.ctx);
+			await dflt.command.handler("reset", dflt.ctx);
+			notes.length = 0;
+			await dflt.command.handler("", dflt.ctx);
+			expect(lastUrl()).toBeDefined();
+			jest.advanceTimersByTime(DEFAULT_IDLE_TIMEOUT_MS - 1);
+			expect(notes.some(n => /auto-stopped/i.test(n))).toBe(false);
+			jest.advanceTimersByTime(1);
+			expect(notes.some(n => /auto-stopped/i.test(n))).toBe(true);
+			notes.length = 0;
+			await dflt.command.handler("", dflt.ctx);
+			const reopened = lastUrl();
+			expect(reopened).toBeDefined();
+			expect((await fetch(`${reopened}/api/state`)).status).toBe(200);
+		} finally {
+			await dflt.command.handler("stop", dflt.ctx);
+			jest.useRealTimers();
 		}
 	});
 });
@@ -1017,5 +1206,28 @@ describe("renderSwarmHtml", () => {
 		expect(html).toContain('class="brand-mark"');
 		expect(html).toContain("backdrop-filter: blur(");
 		expect(html).toContain("@media (prefers-reduced-motion: reduce)");
+	});
+
+	test("removes redundant header brand and goal card, collapses status key into one details disclosure, and uses clean margins", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const html = renderSwarmHtml();
+		expect(html).not.toContain('class="brand"');
+		expect(html).not.toContain(">omp/swarm<");
+		expect(html).not.toContain('id="goal-card"');
+		expect(html).toContain('id="overview-summary"');
+		expect(html).toContain('<details class="status-key-disclosure">');
+		expect(html.match(/data-status-key/g)?.length).toBe(1);
+		expect(html).toContain("padding-inline: clamp(.85rem, 2.5vw, 1.5rem)");
+		expect(html).toContain("padding-block: .75rem 1.5rem");
+	});
+
+	test("uses compact 11.5px base typography and renders Markdown safely via DOM nodes", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const html = renderSwarmHtml();
+		expect(html).toContain("font: .72rem/1.38 var(--font-sans)");
+		expect(html).toContain("function renderMarkdown(");
+		expect(html).toContain("function renderInline(");
+		expect(html).toContain("table-wrapper");
+		expect(html).not.toContain("innerHTML");
 	});
 });

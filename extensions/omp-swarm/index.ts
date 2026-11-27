@@ -2,13 +2,20 @@ import { startSwarmServer } from "./server";
 import { extractAgentTarget, parseObject, parseScreenshots, SwarmStore } from "./state";
 import type { ExtensionAPI, ExtensionContext, ExtensionEventName, SwarmServerHandle } from "./types";
 
+export const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60_000;
+
 const COORDINATOR = "coordinator";
 const SNIPPET_LENGTH = 500;
-let autoStartPending = false;
-// The store signals the threshold synchronously; the task hook owns the notifying context.
-const store = new SwarmStore({ onAutoStart: () => { autoStartPending = true; } });
+let autoStart: "armed" | "started" | "pending" | "suppressed" = "armed";
 let server: SwarmServerHandle | null = null;
 let stallTimer: NodeJS.Timeout | null = null;
+let idleStoppedAtTasks: number | null = null;
+// The store signals the first threshold synchronously; the task hook owns the notifying context.
+const store = new SwarmStore({
+	onAutoStart: () => {
+		if (autoStart !== "suppressed" && idleStoppedAtTasks === null) autoStart = "pending";
+	},
+});
 
 type Task = Parameters<typeof describeTask>[0];
 
@@ -31,6 +38,15 @@ function firstProseLine(lines: string[], start = 0): string {
 	return "";
 }
 
+function clipWords(text: string, max: number): string {
+	const cleaned = text.replace(/\s+/g, " ").trim();
+	if (cleaned.length <= max) return cleaned;
+	const limit = max - 1;
+	const boundary = cleaned.lastIndexOf(" ", limit);
+	const clipped = cleaned.slice(0, boundary >= Math.floor(max / 2) ? boundary : limit);
+	return `${clipped.replace(/[\s,;:]+$/, "")}…`;
+}
+
 export function describeTask(task: { name?: string; agent?: string; task?: string; solutionSpace?: string }): string {
 	const text = task.task?.trim();
 	if (text) {
@@ -38,33 +54,33 @@ export function describeTask(task: { name?: string; agent?: string; task?: strin
 		const newTag = /^\[NEW\]\s*/;
 		const owned: unknown = Array.isArray(slice?.owns) ? slice.owns[0] : undefined;
 		const path = typeof owned === "string" ? owned.trim().replace(newTag, "") : "";
-		if (path) return path.slice(0, 72);
+		if (path) return clipWords(path, 64);
 		const symbol: unknown = Array.isArray(slice?.symbols) ? slice.symbols[0] : undefined;
 		if (typeof symbol === "object" && symbol !== null && "name" in symbol && typeof symbol.name === "string") {
 			const name = symbol.name.trim().replace(newTag, "");
-			if (name) return name.slice(0, 72);
+			if (name) return clipWords(name, 64);
 		}
 	}
-	return (task.solutionSpace?.trim() || (text ? firstProseLine(text.split(/\r?\n/)) : "")).slice(0, 72);
+	return clipWords(task.solutionSpace?.trim() || (text ? firstProseLine(text.split(/\r?\n/)) : ""), 64);
 }
 
 export function deriveBatchTitle(input: Record<string, unknown>, tasks: Array<{ name?: string; agent?: string; task?: string; solutionSpace?: string }>): string {
 	const intent = typeof input.i === "string" ? input.i.trim() : "";
-	if (intent) return intent.slice(0, 52);
+	if (intent) return clipWords(intent, 48);
 	if (typeof input.context === "string") {
 		const lines = input.context.split(/\r?\n/);
 		const goal = lines.findIndex(line => /^#[ \t]+goal(?:[ \t]+#+)?$/i.test(line.trim()));
 		const title = (goal >= 0 && firstProseLine(lines, goal + 1)) || firstProseLine(lines);
-		if (title.length >= 4 && !/^adversarial second-opinion review/i.test(title)) return title.slice(0, 52);
+		if (title.length >= 4 && !/^adversarial second-opinion review/i.test(title)) return clipWords(title, 48);
 	}
-	if (tasks.length === 1) return (describeTask(tasks[0]) || tasks[0].name?.trim() || "Task batch").slice(0, 52);
+	if (tasks.length === 1) return clipWords(describeTask(tasks[0]) || tasks[0].name?.trim() || "Task batch", 48);
 	if (tasks.length > 1) {
 		const names = tasks.map(task => task.name?.trim()).filter(Boolean);
 		if (names.length) {
 			const prefix = tasks.every(task => /review/i.test(task.agent ?? "")) ? "Review: "
 				: tasks.every(task => task.agent === "scout") ? "Scout: " : "";
 			const rest = names.length > 3 ? ` +${names.length - 3}` : "";
-			return `${prefix}${names.slice(0, 3).join(", ")}${rest}`.slice(0, 52);
+			return clipWords(`${prefix}${names.slice(0, 3).join(", ")}${rest}`, 48);
 		}
 	}
 	return "Task batch";
@@ -156,8 +172,32 @@ function stopStallTimer(): void {
 	clearInterval(timer ?? undefined);
 }
 
+function ensureServer(idleTimeoutMs: number, ui?: ExtensionContext["ui"]): SwarmServerHandle {
+	if (server !== null) {
+		autoStart = "started";
+		return server;
+	}
+	const handle = startSwarmServer(store, {
+		idleTimeoutMs,
+		onIdleStop: () => {
+			if (server !== handle) return;
+			server = null;
+			idleStoppedAtTasks = store.getSnapshot().totalTasks;
+			stopStallTimer();
+			try { ui?.notify("Swarm server auto-stopped after idle timeout", "info"); } catch { /* Notification must not interrupt cleanup. */ }
+		},
+	});
+	server = handle;
+	idleStoppedAtTasks = null;
+	autoStart = "started";
+	return handle;
+}
+
 function stopServer(): void {
 	const running = server;
+	// A server left running by reset may still be active or have since stopped on idle.
+	if (running !== null || autoStart !== "armed" || idleStoppedAtTasks !== null) autoStart = "suppressed";
+	idleStoppedAtTasks = null;
 	server = null;
 	running?.stop();
 }
@@ -191,8 +231,12 @@ function postSwarmChat(pi: ExtensionAPI, content: string): void {
 	} catch { /* A chat failure must not suppress the notification. */ }
 }
 
-export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?: (url: string) => boolean }): void {
+export default function ompSwarmExtension(
+	pi: ExtensionAPI,
+	options?: { openUrl?: (url: string) => boolean; idleTimeoutMs?: number },
+): void {
 	const openUrl = options?.openUrl ?? openSwarmUrl;
+	const idleTimeoutMs = options?.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
 	// Factories are rebound for child sessions. Only plan-review correlation is session-local.
 	let pendingPlan: { id: string; title: string } | undefined;
 
@@ -214,17 +258,18 @@ export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?
 						break;
 					case "reset":
 						stopStallTimer();
-						autoStartPending = false;
+						autoStart = "armed";
+						idleStoppedAtTasks = null;
 						store.reset();
 						ctx.ui.notify("Swarm history cleared", "info");
 						break;
 					default: {
-						server ??= startSwarmServer(store);
+						const active = ensureServer(idleTimeoutMs, ctx.ui);
 						const { doneTasks, totalTasks } = store.getSnapshot();
-						const summary = `Swarm UI: ${server.url} (${doneTasks}/${totalTasks} tasks done)`;
+						const summary = `Swarm UI: ${active.url} (${doneTasks}/${totalTasks} tasks done)`;
 						let opened = false;
 						if (canOpenBrowser(ctx)) {
-							try { opened = openUrl(server.url); } catch { /* Keep the URL available in chat. */ }
+							try { opened = openUrl(active.url); } catch { /* Keep the URL available in chat. */ }
 						}
 						postSwarmChat(pi, summary);
 						ctx.ui.notify(opened ? `${summary} — opened in browser` : summary, "info");
@@ -282,10 +327,13 @@ export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?
 				tasks.map(task => ({ ...task, description: describeTask(task) })),
 			);
 			ensureStallTimer(ctx.ui);
-			if (autoStartPending) {
-				server ??= startSwarmServer(store);
-				autoStartPending = false;
-				const summary = `Swarm UI: ${server.url}`;
+			if (server === null && idleStoppedAtTasks !== null) {
+				const snap = store.getSnapshot();
+				if (snap.totalTasks - idleStoppedAtTasks >= snap.autoStartThreshold) autoStart = "pending";
+			}
+			if (autoStart === "pending") {
+				const active = ensureServer(idleTimeoutMs, ctx.ui);
+				const summary = `Swarm UI: ${active.url}`;
 				postSwarmChat(pi, summary);
 				ctx.ui.notify(summary, "info");
 			}
