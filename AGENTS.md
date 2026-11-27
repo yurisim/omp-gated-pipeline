@@ -12,13 +12,13 @@ Concise repo rules for `omp-gated-pipeline`. Keep this file short: it loads on e
 ## Pipeline - omp-gated-pipeline specifics
 
 - **Barrier:** none. Use the no-barrier path in `skill://parallel-fanout`.
-- **Integration command** (run from repo root): `bun test tests/omp_swarm.test.ts && python -m unittest discover -s tests`
+- **Integration command** (run from repo root): `bun test tests/ && python -m unittest discover -s tests`
 - **Slice acceptance** (run the suite covering owned files):
-  - `extensions/omp-swarm/**`: `bun test tests/omp_swarm.test.ts`
+  - `extensions/omp-swarm/**`: `bun test tests/`
   - `tools/**`, `hooks.json`, `skills/**`, `agents/**`, `rules/**`, `.githooks/**`: `python -m unittest discover -s tests`
   - `AGENTS.md`, `README.md`, `docs/**`: no code test suite (verify any cited commands/paths exist).
 - **Test ids:**
-  - Bun: title regex (`bun test tests/omp_swarm.test.ts -t "<title>"`).
+  - Bun: title regex (`bun test <test file> -t "<title>"`; e.g. `tests/omp_swarm.test.ts` or `tests/omp_swarm_constellation.test.ts`).
   - Python: dotted unittest id from repo root (`python -m unittest tests.<module>.<Class>.<method>`).
 - **Wave-0 red:** run each new spec test alone using the test-id command above. It must fail on an assertion, not on an import, load, or harness error.
 - **Skills per file type** (for `synth` rule 8 and `adversarial-reviewer` rule 97):

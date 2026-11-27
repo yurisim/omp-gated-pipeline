@@ -133,7 +133,7 @@ header {
 	-webkit-backdrop-filter: blur(12px);
 	border-bottom: 1px solid color-mix(in oklab, var(--brand-pink) 28%, var(--border));
 }
-.shell { max-inline-size: 76rem; margin-inline: auto; padding-inline: clamp(.85rem, 2.5vw, 1.5rem); }
+.shell { max-inline-size: 86rem; margin-inline: auto; padding-inline: clamp(.85rem, 2.5vw, 1.5rem); }
 main.shell { padding-block: .75rem 1.5rem; }
 main > section[role="tabpanel"] { display: grid; gap: .85rem; }
 .header-bar {
@@ -174,13 +174,16 @@ h3 { font-size: .75rem; font-weight: 600; }
 .grid { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
 .card, .dense-list {
 	background: color-mix(in oklab, var(--surface) 92%, transparent);
-	border: 1px solid color-mix(in oklab, var(--brand-cyan) 18%, var(--border));
-	border-radius: 8px;
-	box-shadow: 0 1px 2px color-mix(in oklab, var(--bg) 45%, transparent),
-		0 8px 24px -16px color-mix(in oklab, var(--brand-cyan) 18%, transparent);
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	box-shadow: 0 1px 2px color-mix(in oklab, var(--bg) 35%, transparent);
 }
 .card { padding: .55rem .75rem; min-inline-size: 0; }
 .card > * + * { margin-block-start: .3rem; }
+.card.jumpable:hover { border-color: color-mix(in oklab, var(--border-strong) 55%, var(--border)); }
+.member-grid { display: grid; gap: .55rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+.member-grid .card { block-size: 100%; }
+.msg-head { padding-block-end: .3rem; border-block-end: 1px solid var(--border); }
 .overview-summary { font-size: .74rem; line-height: 1.35; }
 #milestone-items, #risk-items { padding-inline-start: 1.1rem; margin: 0; gap: .25rem; }
 .dense-list { overflow: hidden; }
@@ -192,7 +195,7 @@ h3 { font-size: .75rem; font-weight: 600; }
 	padding: .36rem .7rem;
 }
 .dense-row:not(:last-child) { border-bottom: 1px solid var(--border); }
-.dense-row:hover { background: color-mix(in oklab, var(--surface-2) 55%, transparent); }
+.dense-row:hover { background: color-mix(in oklab, var(--surface-2) 65%, var(--surface)); }
 #team .dense-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 6rem; }
 .dense-copy h3 { display: inline; margin-inline-end: .45rem; }
 .dense-row > .badge { justify-self: end; }
@@ -350,46 +353,61 @@ details[open] > summary { margin-block-end: .35rem; }
 .status-key-disclosure summary { cursor: pointer; font-size: .7rem; width: fit-content; min-block-size: 1.35rem; padding-block: .15rem; }
 .status-key-disclosure[open] > .row { margin-block-start: .6rem; }
 pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 1px solid var(--border); border-radius: 8px; overflow: auto; }
-.timeline { display: grid; gap: .25rem; }
-#scrub { inline-size: 100%; min-block-size: 1.9rem; margin: 0; }
-.legend { margin-block: .65rem; color: var(--muted); }
+.timeline { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem .55rem; }
+.timeline > .controls { gap: .25rem; }
+.timeline > :first-child { margin-block-start: 0; }
+.timeline > * + * { margin-block-start: 0; }
+#scrub { flex: 1 1 8rem; min-inline-size: min(100%, 8rem); min-block-size: 1.9rem; margin: 0; }
+#graph-views { flex-wrap: nowrap; gap: 2px; padding: 2px; background: var(--dusk); border: 1px solid var(--border); border-radius: 8px; }
+#graph-views button:not([aria-pressed="true"], :hover) { border-color: transparent; background: transparent; color: var(--muted); }
+.legend { margin-block-start: .55rem; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: .4rem; }
 .line-key { inline-size: 1.65rem; border-top: 2px solid; }
 .line-key.spawn { border-top-style: dashed; }
 .line-key.wait { border-top-style: dotted; color: var(--warn); }
 .line-key.peer { border: 0; block-size: 2px; color: color-mix(in oklab, var(--brand-cyan) 65%, var(--muted)); }
 .line-key.peer path { stroke: currentColor; stroke-width: 2; }
+.graph-workspace, .graph-side { display: grid; gap: .75rem; min-inline-size: 0; }
+.graph-stage { position: relative; min-inline-size: 0; }
 .graph-scroll {
 	border: 1px solid color-mix(in oklab, var(--brand-cyan) 22%, var(--border));
 	border-radius: 12px;
-	background: color-mix(in oklab, var(--dusk) 85%, transparent);
-	overflow: auto;
-	min-inline-size: 0;
-	max-block-size: min(70vh, 50rem);
+	background: var(--dusk);
+	background: radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--surface) 75%, var(--dusk)), var(--dusk) 78%);
+	block-size: clamp(24rem, 62vh, 44rem);
+	overflow: hidden;
+	touch-action: none;
 }
-#graph-svg { display: block; max-inline-size: none; }
-.lane { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.25; }
-.lane-coord { fill: color-mix(in oklab, var(--brand-cyan) 10%, var(--surface)); stroke: var(--brand-cyan); }
-.lane-node { cursor: pointer; }
-.lane-node:hover .lane { stroke: var(--accent); }
-.lane-node:focus-visible .lane, .lane-node[aria-pressed="true"] .lane { stroke: var(--accent); stroke-width: 3; }
-.lane-node:focus-visible .lane { stroke-dasharray: 5 3; }
-.lane-node:focus-visible { outline: none; }
-.lane-divider { stroke: var(--border-strong); }
+#graph-svg { display: block; inline-size: 100%; block-size: 100%; cursor: grab; user-select: none; }
+#graph-svg.panning, #graph-svg.panning * { cursor: grabbing; }
+.zoom-controls { position: absolute; inset-block-start: .5rem; inset-inline-end: .5rem; display: flex; gap: .25rem; }
+.zoom-controls button { background: var(--surface); }
+.constellation-ring, .tree-edge { fill: none; vector-effect: non-scaling-stroke; pointer-events: none; }
+.constellation-ring { stroke: var(--border); stroke-width: 1; }
+.tree-edge { stroke: var(--border-strong); stroke-width: 1; }
+.lane-node, .member-node, .message-edge { cursor: pointer; }
+.lane-star, .member-star, .star-glyph { color: var(--muted); }
+:is(.lane-star, .member-star, .star-glyph):is([data-status="active"], [data-status="done"]) { color: var(--ok); }
+:is(.lane-star, .member-star, .star-glyph):is([data-status="running"], [data-status="working"]) { color: var(--info); }
+:is(.lane-star, .member-star, .star-glyph)[data-status="waiting"] { color: var(--warn); }
+:is(.lane-star, .member-star, .star-glyph)[data-status="blocked"] { color: var(--err); }
+.lane-star, .member-star {
+	fill: var(--surface);
+	fill: color-mix(in oklab, currentColor 14%, var(--surface));
+	stroke: currentColor;
+	stroke-width: 1.75px;
+}
+.star-glyph { fill: currentColor; font: 700 12px var(--font-sans); pointer-events: none; }
+.lane-halo, .member-halo { fill: none; stroke-width: 1.75px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.member-halo[data-working="true"] { stroke: var(--info); stroke-dasharray: 2 3; }
+.lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane-halo,
+.member-node:is(:hover, :focus-visible, [aria-pressed="true"]) .member-halo { stroke: var(--accent); stroke-width: 2px; stroke-dasharray: none; }
+.lane-node:focus-visible .lane-halo, .member-node:focus-visible .member-halo { stroke-dasharray: 4 2; }
+:is(.lane-node, .member-node, .message-edge):focus-visible { outline: none; }
 .lane-label, .member-label { fill: var(--fg); font-weight: 650; }
 .lane-label { font-size: 12px; }
 .member-label { font-size: 11px; }
 .member-desc { fill: var(--muted); font-size: 9.5px; }
-.lane-status, .member-status { color: var(--muted); fill: currentColor; font-size: 10px; }
-.lane-status[data-status="done"], .member-status:is([data-status="done"], [data-status="active"]) { color: var(--ok); }
-.lane-status[data-status="running"], .member-status[data-status="working"] { color: var(--info); }
-.member-status[data-status="waiting"] { color: var(--warn); }
-:is(.lane-status, .member-status)[data-status="blocked"] { color: var(--err); }
-.member-node rect { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: 1.25; }
-.member-node, .message-edge { cursor: pointer; }
-.member-node:focus-visible rect, .member-node[aria-pressed="true"] rect { stroke: var(--accent); stroke-width: 4; }
-.member-node:focus-visible rect { stroke-dasharray: 5 3; }
-.member-node:focus-visible, .message-edge:focus-visible { outline: none; }
 .edge-line, .edge-hit { fill: none; }
 .edge-line { stroke: var(--muted); stroke-width: 2; }
 .edge-hit { stroke: transparent; stroke-width: 24; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
@@ -409,6 +427,10 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .lane-member-last { align-items: baseline; }
 .lane-member-last .message { flex: 1; }
 .lane-close { font-size: 1rem; line-height: 1; }
+@media (min-width: 60rem) {
+	.graph-workspace { grid-template-columns: minmax(0, 1fr) 23rem; align-items: start; }
+	.graph-side { position: sticky; top: 3.5rem; max-block-size: calc(100vh - 4.5rem); overflow: auto; }
+}
 @media (max-width: 42rem) {
 	:root { scroll-padding-block-start: 7rem; }
 	.header-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "heading status" "tabs tabs"; }
@@ -424,11 +446,13 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	.edge-hit { stroke-width: 40; }
 }
 @media (prefers-reduced-motion: reduce) {
-	button, [role="tab"], .dense-row { transition: none; }
+	*, *::before, *::after { transition: none !important; animation: none !important; }
 }
 @media (forced-colors: active) {
 	:root { scrollbar-color: auto; }
 	body { background-image: none; }
+	.graph-scroll { background: Canvas; border-color: CanvasText; }
+	.card, .dense-list, [role="tab"][aria-selected="true"] { box-shadow: none; }
 	header { backdrop-filter: none; -webkit-backdrop-filter: none; background: Canvas; }
 	.brand-mark { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 	.badge { background: Canvas; border: 1px solid CanvasText; }
@@ -438,14 +462,17 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	:focus-visible, .jumpable:focus { outline-color: Highlight; }
 	[role="tab"][aria-selected="true"], button[aria-pressed="true"] { border-color: Highlight; }
 	progress { appearance: auto; }
-	.lane, .member-node rect { fill: Canvas; stroke: CanvasText; }
-	.lane-divider { stroke: CanvasText; }
-	.lane-label, .lane-status, .member-label, .member-desc, .member-status { fill: CanvasText; }
+	progress::-webkit-progress-value { background: Highlight; }
+	progress::-moz-progress-bar { background: Highlight; }
+	.lane-star, .member-star { fill: Canvas; stroke: CanvasText; }
+	.constellation-ring, .tree-edge { stroke: CanvasText; }
+	.star-glyph, .lane-label, .member-label, .member-desc { fill: CanvasText; }
 	.edge-line, .edge-wait .edge-line { stroke: CanvasText; }
 	.edge-peer .edge-line, .line-key.peer path { stroke: CanvasText; stroke-dasharray: 7 3 2 3; }
 	.marker-arrow { fill: CanvasText; }
-	.lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane { stroke: Highlight; }
-	.member-node:focus-visible rect, .member-node[aria-pressed="true"] rect,
+	.member-halo[data-working="true"] { stroke: CanvasText; }
+	.lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane-halo,
+	.member-node:is(:hover, :focus-visible, [aria-pressed="true"]) .member-halo,
 	.message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: Highlight; }
 }
 </style>
@@ -540,31 +567,40 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 				<select id="speed"><option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option></select>
 			</div>
 			<input id="scrub" type="range" min="1" max="1" value="1" aria-label="Replay position">
-			<div class="row between">
-				<output id="playback-position" for="scrub" aria-live="off">No messages yet</output>
-				<div id="graph-views" class="controls" role="group" aria-label="Graph view">
-					<button type="button" data-view="Network" aria-pressed="true">Network</button>
-					<button type="button" data-view="Mentions" aria-pressed="false">Mentions</button>
-				</div>
+			<output id="playback-position" for="scrub" aria-live="off">No messages yet</output>
+			<div id="graph-views" class="controls" role="group" aria-label="Graph view">
+				<button type="button" data-view="Network" aria-pressed="true">Network</button>
+				<button type="button" data-view="Mentions" aria-pressed="false">Mentions</button>
 			</div>
 		</div>
-		<div class="graph-scroll" id="graph-scroll">
-			<svg id="graph-svg" role="group" aria-label="Swarm network: select a lane, member, or directed arrow for details"></svg>
+		<div class="graph-workspace">
+			<div class="graph-stage">
+				<div class="zoom-controls" role="group" aria-label="Constellation zoom">
+					<button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+					<button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+					<button type="button" id="zoom-fit" aria-label="Fit constellation to view">Fit</button>
+				</div>
+				<div class="graph-scroll" id="graph-scroll">
+					<svg id="graph-svg" role="group" aria-label="Swarm constellation: select a lane, member, or directed arrow for details"></svg>
+				</div>
+				<div class="legend" role="group" aria-label="Graph legend">
+					<span><i class="line-key" aria-hidden="true"></i>Message</span>
+					<span><svg class="line-key peer" aria-hidden="true" viewBox="0 0 28 2"><path d="M0 1 H28"></path></svg>Peer message</span>
+					<span><i class="line-key spawn" aria-hidden="true"></i>Spawn</span>
+					<span><i class="line-key wait" aria-hidden="true"></i>Waiting for coordinator</span>
+				</div>
+			</div>
+			<aside class="graph-side" aria-label="Graph details">
+				<section class="card" aria-labelledby="detail-title">
+					<h2 id="detail-title">Selected detail</h2>
+					<div id="graph-detail">Select a lane, member, or message.</div>
+				</section>
+				<section id="mentions" class="card" aria-labelledby="mentions-title" hidden>
+					<h2 id="mentions-title">Mentions</h2>
+					<div id="mention-items" class="stack mention-list"></div>
+				</section>
+			</aside>
 		</div>
-		<div class="legend" role="group" aria-label="Graph legend">
-			<span><i class="line-key" aria-hidden="true"></i>Message</span>
-			<span><svg class="line-key peer" aria-hidden="true" viewBox="0 0 28 2"><path d="M0 1 H28"></path></svg>Peer message</span>
-			<span><i class="line-key spawn" aria-hidden="true"></i>Spawn</span>
-			<span><i class="line-key wait" aria-hidden="true"></i>Waiting for coordinator</span>
-		</div>
-		<section class="card" aria-labelledby="detail-title">
-			<h2 id="detail-title">Selected detail</h2>
-			<div id="graph-detail">Select a lane, member, or message.</div>
-		</section>
-		<section id="mentions" class="card" aria-labelledby="mentions-title" hidden>
-			<h2 id="mentions-title">Mentions</h2>
-			<div id="mention-items" class="stack mention-list"></div>
-		</section>
 	</section>
 </main>
 <footer class="shell page-footer">
@@ -593,7 +629,6 @@ let followLive = true;
 let playing = false;
 let playbackTimer;
 let selection;
-let centered = false;
 
 // Snapshot text is never parsed as HTML. Markdown uses only the elements defined below.
 function node(tag, className, text) {
@@ -1063,7 +1098,7 @@ function messageCard(message, inBoard) {
 		card.classList.add('jumpable');
 		card.tabIndex = -1;
 	}
-	const head = node('div', 'row between');
+	const head = node('div', inBoard ? 'row between msg-head' : 'row between');
 	head.append(node('h3', 'mono', '#' + message.seq + ' · ' + mention(message.from) + ' → ' + mention(message.to)), badge(message.tag));
 	card.append(head, showTime(message.timestamp), renderMarkdown(message.text));
 	if (message.jsonPayload !== null) {
@@ -1096,8 +1131,10 @@ function renderBoard() {
 }
 function renderMembers() {
 	const search = byId('member-search').value.trim().toLowerCase();
-	const active = node('ul', 'plain stack');
-	const retired = node('ul', 'plain stack');
+	const active = node('ul', 'plain member-grid');
+	const retired = node('ul', 'plain member-grid');
+	active.setAttribute('role', 'list');
+	retired.setAttribute('role', 'list');
 	let retiredCount = 0;
 	for (const member of snapshot.members) {
 		if (member.status === 'retired') retiredCount++;
@@ -1258,22 +1295,21 @@ function graphChoice(el, key, name, pressed, activate) {
 		if (event.key === ' ') activate();
 	});
 }
-const NODE_W = 180;
-const NODE_H = 60;
-const NODE_GAP_X = 36;
-const MAX_ROW_COLS = 4;
-const LANE_PAD_X = 28;
-const LANE_HEADER_H = 36;
-const LANE_PAD_TOP = 16;
-const LANE_PAD_BOTTOM = 22;
-const COORD_LANE_GAP = 64;
-const LANE_GAP_Y = 36;
-const CANVAS_PAD = 24;
-const CORRIDOR_STEP = 8;
+const HUB_R = 26;
+const COORD_R = 14;
+const BRANCH_R = 15;
+const MEMBER_R = 11;
+const RING_1 = 132;
+const RING_2 = 258;
+const MIN_ARC = 74;
+const LABEL_MARGIN = 148;
+const TAU = 2 * Math.PI;
+const NORTH = -Math.PI / 2;
 function clip(text, length) {
 	return text.length <= length ? text : Array.from(text).slice(0, length - 1).join('') + '…';
 }
-function layoutNetwork(frame) {
+const GROUP_STATUS_ORDER = ['idle', 'done', 'working', 'waiting', 'blocked'];
+function layoutConstellation(frame) {
 	const people = new Map(frame.members.map(member => [member.id, member]));
 	const coordinators = frame.members.filter(member => member.kind === 'main');
 	if (!coordinators.length) {
@@ -1290,6 +1326,9 @@ function layoutNetwork(frame) {
 	const center = { id: 'coordinator', threadId: null, title: 'Coordinator', summary: frame.goalSummary || '',
 		status: undefined, doneCount: frame.doneTasks ?? 0, totalCount: frame.totalTasks ?? 0,
 		now: frame.runningSummary && frame.runningSummary !== 'Idle' ? frame.runningSummary : '', attentionIds: [], members: coordinators };
+	center.x = center.y = center.depth = 0;
+	center.r = HUB_R;
+	center.angle = NORTH;
 	const workers = { id: 'workers', threadId: null, title: 'Unassigned workers', summary: '',
 		status: undefined, doneCount: 0, totalCount: 0, now: '', attentionIds: [], members: [] };
 	const outside = { id: 'outside', threadId: null, title: 'Other participants', summary: '',
@@ -1311,32 +1350,61 @@ function layoutNetwork(frame) {
 		}
 	}
 	const lanes = [center, ...threads.values()];
-	if (workers.members.length) lanes.push(workers);
-	if (outside.members.length) lanes.push(outside);
+	for (const group of [workers, outside]) {
+		if (!group.members.length) continue;
+		let priority = 0;
+		for (const member of group.members) {
+			priority = Math.max(priority, GROUP_STATUS_ORDER.indexOf(member.status));
+			if (priority === GROUP_STATUS_ORDER.length - 1) break;
+		}
+		group.status = GROUP_STATUS_ORDER[priority];
+		lanes.push(group);
+	}
 	const points = new Map();
-	let maxCols = 0;
-	for (const [laneIndex, lane] of lanes.entries()) {
-		const n = lane.members.length;
-		const rowCount = Math.ceil(n / MAX_ROW_COLS);
-		lane.rows = [];
-		if (!rowCount) continue;
-		const colsPerRow = Math.ceil(n / rowCount);
-		const extra = n % rowCount;
-		maxCols = Math.max(maxCols, colsPerRow);
-		let offset = 0;
-		for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
-			const cols = colsPerRow - (extra !== 0 && rowIndex >= extra ? 1 : 0);
-			const row = { points: [], maxArcDepth: 0 };
-			for (let colIndex = 0; colIndex < cols; colIndex++) {
-				const point = { x: 0, y: 0, laneIndex, rowIndex, colIndex };
-				row.points.push(point);
-				points.set(lane.members[offset++].id, point);
-			}
-			lane.rows.push(row);
+	points.set(coordinator, { x: 0, y: 0, r: COORD_R, depth: 0, angle: NORTH });
+	for (let i = 1; i < coordinators.length; i++) {
+		const angle = NORTH + TAU * (i - 1) / (coordinators.length - 1);
+		points.set(coordinators[i].id, { x: 46 * Math.cos(angle), y: 46 * Math.sin(angle), r: COORD_R, depth: 1, angle });
+	}
+	const branches = lanes.slice(1);
+	const totalLeaves = branches.reduce((sum, branch) => sum + Math.max(1, branch.members.length), 0);
+	const scale = Math.max(1, totalLeaves * MIN_ARC / (TAU * RING_2));
+	const ring1 = branches.length ? RING_1 * scale : 0;
+	const ring2 = branches.some(branch => branch.members.length > 0) ? RING_2 * scale : 0;
+	const pad = branches.length ? totalLeaves / branches.length / 2 : 0;
+	const weightedLeaves = totalLeaves + pad * branches.length;
+	const treeEdges = [];
+	let start = NORTH;
+	for (const branch of branches) {
+		const n = branch.members.length;
+		const weight = Math.max(1, n);
+		if (branches.length === 1) {
+			branch.angle = NORTH;
+			branch.span = Math.min(Math.PI * 1.5, Math.max(Math.PI * .45, weight * .42));
+		} else {
+			branch.span = TAU * (weight + pad) / weightedLeaves;
+			branch.angle = start + branch.span / 2;
+			start += branch.span;
+		}
+		const cos = Math.cos(branch.angle), sin = Math.sin(branch.angle);
+		branch.x = ring1 * cos;
+		branch.y = ring1 * sin;
+		branch.r = BRANCH_R;
+		branch.depth = 1;
+		treeEdges.push('M 0 0 L ' + branch.x + ' ' + branch.y);
+		const radial = 'M ' + branch.x + ' ' + branch.y + ' L ' + (ring2 * cos) + ' ' + (ring2 * sin);
+		for (let k = 0; k < n; k++) {
+			const angle = branch.angle - branch.span / 2 + (k + .5) * branch.span / n;
+			const x = ring2 * Math.cos(angle), y = ring2 * Math.sin(angle);
+			points.set(branch.members[k].id, { x, y, r: MEMBER_R, depth: 2, angle });
+			let delta = angle - branch.angle;
+			if (delta <= -Math.PI) delta += TAU;
+			else if (delta > Math.PI) delta -= TAU;
+			treeEdges.push(delta ? radial + ' A ' + ring2 + ' ' + ring2 + ' 0 0 ' + Number(delta > 0) + ' ' + x + ' ' + y : radial);
 		}
 	}
-	const laneWidth = Math.max(460, maxCols * NODE_W + Math.max(0, maxCols - 1) * NODE_GAP_X + 2 * LANE_PAD_X);
-	// Use the whole frame so switching to Mentions changes neither the rows nor the visible paths.
+
+	// Count routes over the whole frame so a Mentions filter cannot change the paths.
 	const pairs = new Map();
 	const routes = new Map();
 	function addRoute(fromId, toId) {
@@ -1345,111 +1413,135 @@ function layoutNetwork(frame) {
 		if (!pair) pairs.set(key, pair = { from: points.get(fromId), to: points.get(toId), count: 0 });
 		return { pair, pairIndex: pair.count++ };
 	}
-	for (const message of frame.messages) {
-		const route = addRoute(message.from, message.to);
-		const { pair: { from, to }, pairIndex } = route;
-		routes.set(message.seq, route);
-		if (from === to || from.laneIndex !== to.laneIndex || from.rowIndex !== to.rowIndex) continue;
-		const span = Math.abs(to.colIndex - from.colIndex);
-		const depth = Math.min(140, 28 + (span - 1) * 26 + pairIndex * 14);
-		const row = lanes[from.laneIndex].rows[from.rowIndex];
-		row.maxArcDepth = Math.max(row.maxArcDepth, depth);
-	}
+	for (const message of frame.messages) routes.set(message.seq, addRoute(message.from, message.to));
 	const waitRoutes = new Map();
 	for (const member of people.values()) {
 		if (member.status === 'waiting' && member.id !== coordinator) waitRoutes.set(member.id, addRoute(member.id, coordinator));
 	}
-	let y = CANVAS_PAD;
-	let rowOrder = 0;
-	for (const [laneIndex, lane] of lanes.entries()) {
-		if (laneIndex) y += laneIndex === 1 ? COORD_LANE_GAP : LANE_GAP_Y;
-		lane.y = y;
-		y += LANE_HEADER_H + LANE_PAD_TOP;
-		for (const [rowIndex, row] of lane.rows.entries()) {
-			const rowWidth = row.points.length * NODE_W + (row.points.length - 1) * NODE_GAP_X;
-			const startX = CANVAS_PAD + (laneWidth - rowWidth) / 2 + NODE_W / 2;
-			for (const point of row.points) {
-				point.x = startX + point.colIndex * (NODE_W + NODE_GAP_X);
-				point.y = y + NODE_H / 2;
-				point.rowOrder = rowOrder;
-			}
-			rowOrder++;
-			const gutter = row.maxArcDepth ? Math.min(164, row.maxArcDepth + 24)
-				: rowIndex === lane.rows.length - 1 ? LANE_PAD_BOTTOM : 28;
-			y += NODE_H + gutter;
-		}
-		lane.height = y - lane.y;
-	}
-	// A track runs outside the lanes, clear of every intermediate card regardless of row alignment.
-	const detours = [[], []];
-	const centerX = CANVAS_PAD + laneWidth / 2;
-	for (const pair of pairs.values()) {
-		const { from, to } = pair;
-		const upper = Math.min(from.rowOrder, to.rowOrder), lower = Math.max(from.rowOrder, to.rowOrder);
-		if (lower - upper <= 1) continue;
-		const midX = (from.x + to.x) / 2;
-		const side = midX > centerX || (midX === centerX && from.rowOrder > to.rowOrder) ? 1 : 0;
-		detours[side].push({ upper, lower, pair });
-	}
-	let padding = CANVAS_PAD;
-	for (const [side, edges] of detours.entries()) {
-		const trackEnds = [];
-		edges.sort((a, b) => a.upper - b.upper);
-		for (const { upper, lower, pair } of edges) {
-			// Reuse tracks only when the previous edge ends above this one's first turn.
-			let track = trackEnds.findIndex(end => end <= upper);
-			if (track === -1) track = trackEnds.length;
-			trackEnds[track] = lower;
-			const offset = (track + 1) * CORRIDOR_STEP;
-			pair.corridorX = CANVAS_PAD + (side ? laneWidth + offset : -offset);
-			padding = Math.max(padding, offset + CORRIDOR_STEP);
-		}
-	}
-	return { lanes, points, people, coordinator, laneWidth, xMin: CANVAS_PAD - padding,
-		width: laneWidth + 2 * padding, height: y + CANVAS_PAD, routes, waitRoutes };
+	const outer = (ring2 || ring1 || HUB_R) + LABEL_MARGIN;
+	return { lanes, branches, points, people, coordinator, ring1, ring2, treeEdges,
+		bounds: { x: -outer, y: -outer, width: outer * 2, height: outer * 2 }, routes, waitRoutes };
 }
-function corridorPath(x1, y1, x2, y2, x) {
-	const radius = 8;
-	const v = Math.sign(y2 - y1) * radius;
-	const entryY = y1 + v * 1.5, exitY = y2 - v * 1.5;
-	const entryX = Math.sign(x - x1) * radius, exitX = Math.sign(x2 - x) * radius;
-	return 'M ' + x1 + ' ' + y1 +
-		' V ' + (entryY - v) + ' Q ' + x1 + ' ' + entryY + ' ' + (x1 + entryX) + ' ' + entryY +
-		' H ' + (x - entryX) + ' Q ' + x + ' ' + entryY + ' ' + x + ' ' + (entryY + v) +
-		' V ' + (exitY - v) + ' Q ' + x + ' ' + exitY + ' ' + (x + exitX) + ' ' + exitY +
-		' H ' + (x2 - exitX) + ' Q ' + x2 + ' ' + exitY + ' ' + x2 + ' ' + (exitY + v) + ' V ' + y2;
-}
-function edgePath(from, to, bend, pairIndex, pairCount, corridorX) {
+function constellationEdgePath(from, to, pairIndex, pairCount) {
+	// The hub is painted over the arrows, so use its visible rim for the member at its center.
+	const radius = point => point.depth === 0 ? Math.max(point.r, HUB_R) : point.r;
 	if (from === to) {
-		const side = from.x + NODE_W / 2;
-		const reach = side + Math.min(NODE_GAP_X, bend + 16);
-		return 'M ' + side + ' ' + (from.y - 12) + ' C ' + reach + ' ' + (from.y - 48) + ' ' +
-			reach + ' ' + (from.y + 48) + ' ' + side + ' ' + (from.y + 12);
+		const rim = radius(from) + 3;
+		const reach = rim + 30 + Math.min(54, pairIndex * 9);
+		const side = reach * .62;
+		const cos = Math.cos(from.angle), sin = Math.sin(from.angle);
+		const at = (out, across) => (from.x + cos * out - sin * across) + ' ' + (from.y + sin * out + cos * across);
+		return 'M ' + at(rim * .8, -rim * .6) + ' C ' + at(reach, -side) + ' ' + at(reach, side) + ' ' + at(rim * .8, rim * .6);
 	}
-	if (from.laneIndex === to.laneIndex && from.rowIndex === to.rowIndex) {
-		const reverse = from.x > to.x;
-		const offset = Math.min(32, 10 + pairIndex * 6) * (reverse ? -1 : 1);
-		const bottom = from.y + NODE_H / 2;
-		const span = Math.abs(to.colIndex - from.colIndex);
-		const depth = Math.min(140, 28 + (span - 1) * 26 + pairIndex * 14 + (reverse ? 8 : 0));
-		return 'M ' + (from.x + offset) + ' ' + (bottom + 2) + ' Q ' +
-			((from.x + to.x) / 2) + ' ' + (bottom + depth) + ' ' + (to.x - offset) + ' ' + (bottom + 2);
+	const dx = to.x - from.x, dy = to.y - from.y;
+	const dist = Math.hypot(dx, dy);
+	const maxBend = Math.min(120, dist * .45);
+	const bend = Math.max(-maxBend, Math.min(maxBend, (pairIndex - (pairCount - 1) / 2) * 26 + (pairCount === 1 ? 14 : 0)));
+	const cx = (from.x + to.x) / 2 - dy * bend / dist;
+	const cy = (from.y + to.y) / 2 + dx * bend / dist;
+	// Clip each end along its tangent, so even strongly bent arrows clear the star.
+	const rim = (point, offset) => {
+		const vx = cx - point.x, vy = cy - point.y;
+		const scale = (radius(point) + offset) / Math.hypot(vx, vy);
+		return (point.x + vx * scale) + ' ' + (point.y + vy * scale);
+	};
+	return 'M ' + rim(from, 4) + ' Q ' + cx + ' ' + cy + ' ' + rim(to, 6);
+}
+
+let cam = { x: 0, y: 0, zoom: 1, manual: false };
+let lastBounds = { x: -320, y: -320, width: 640, height: 640 };
+let restoringGraphFocus = false;
+function applyCamera(root, bounds) {
+	const { clientWidth, clientHeight } = byId('graph-scroll');
+	const aspect = clientWidth && clientHeight ? clientWidth / clientHeight : 800 / 540;
+	const width = Math.max(bounds.width, bounds.height * aspect) / cam.zoom;
+	const height = width / aspect;
+	if (!cam.manual) {
+		cam.x = bounds.x + bounds.width / 2;
+		cam.y = bounds.y + bounds.height / 2;
 	}
-	const limit = NODE_W / 2 - 16;
-	const centeredIndex = pairIndex - (pairCount - 1) / 2;
-	const spread = Math.max(-limit, Math.min(limit, centeredIndex * 8));
-	const port = (NODE_H / 2 + 2) * (from.y < to.y ? 1 : -1);
-	const x1 = from.x + spread, x2 = to.x + spread;
-	const y1 = from.y + port, y2 = to.y - port;
-	if (corridorX !== undefined) {
-		const trackSpread = centeredIndex * (CORRIDOR_STEP - 2) / Math.max(1, pairCount - 1);
-		return corridorPath(x1, y1, x2, y2, corridorX + trackSpread);
+	root.setAttribute('viewBox', [cam.x - width / 2, cam.y - height / 2, width, height].join(' '));
+}
+function zoomBy(factor, anchor) {
+	const zoom = Math.max(.4, Math.min(3.5, cam.zoom * factor));
+	if (zoom === cam.zoom) return;
+	if (anchor) {
+		const ratio = cam.zoom / zoom;
+		cam.x = anchor.x + (cam.x - anchor.x) * ratio;
+		cam.y = anchor.y + (cam.y - anchor.y) * ratio;
 	}
-	const dx = x2 - x1, dy = y2 - y1;
-	// Reversing the endpoints reverses the perpendicular. Keep its control point vertically between the ports.
-	const offset = Math.sign(bend) * Math.min(Math.abs(bend), Math.abs(dy) / 2) / Math.hypot(dx, dy);
-	const cx = (x1 + x2) / 2 - offset * dy, cy = (y1 + y2) / 2 + offset * dx;
-	return 'M ' + x1 + ' ' + y1 + ' Q ' + cx + ' ' + cy + ' ' + x2 + ' ' + y2;
+	cam.zoom = zoom;
+	cam.manual = true;
+	applyCamera(byId('graph-svg'), lastBounds);
+}
+function resetCamera() {
+	cam = { x: 0, y: 0, zoom: 1, manual: false };
+	applyCamera(byId('graph-svg'), lastBounds);
+}
+function wireGraphCamera(root) {
+	let pan;
+	let draggedPointerId;
+	root.addEventListener('pointerdown', event => {
+		if (!event.isPrimary || event.button !== 0) return;
+		draggedPointerId = undefined;
+		pan = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
+	});
+	root.addEventListener('pointermove', event => {
+		if (pan?.id !== event.pointerId) return;
+		const dx = event.clientX - pan.x, dy = event.clientY - pan.y;
+		if (!pan.dragging) {
+			if (Math.hypot(dx, dy) <= 4) return;
+			// Capturing earlier would retarget ordinary star and edge clicks to the SVG.
+			root.setPointerCapture(event.pointerId);
+			pan.dragging = true;
+			draggedPointerId = event.pointerId;
+			root.classList.add('panning');
+		}
+		const scale = root.viewBox.baseVal.width / root.getBoundingClientRect().width;
+		cam.x -= dx * scale;
+		cam.y -= dy * scale;
+		cam.manual = true;
+		pan.x = event.clientX;
+		pan.y = event.clientY;
+		applyCamera(root, lastBounds);
+	});
+	function endPan(event) {
+		if (pan?.id !== event.pointerId) return;
+		pan = undefined;
+		root.classList.remove('panning');
+	}
+	root.addEventListener('pointerup', endPan);
+	root.addEventListener('pointercancel', endPan);
+	root.addEventListener('lostpointercapture', event => { if (event.target === root) endPan(event); });
+	root.addEventListener('pointerleave', event => { if (!pan?.dragging) endPan(event); });
+	root.addEventListener('click', event => {
+		if (draggedPointerId !== undefined && event.detail && (event.pointerId === undefined || event.pointerId === draggedPointerId)) {
+			draggedPointerId = undefined;
+			event.preventDefault();
+			event.stopPropagation();
+		}
+	}, true);
+	root.addEventListener('focusin', event => {
+		if (!cam.manual || restoringGraphFocus) return;
+		const shape = event.target.querySelector('.lane-star, .member-star, .edge-line');
+		if (!shape) return;
+		const point = shape.localName === 'circle'
+			? { x: shape.cx.baseVal.value, y: shape.cy.baseVal.value }
+			: shape.getPointAtLength(shape.getTotalLength() / 2);
+		const box = root.viewBox.baseVal;
+		if (point.x >= box.x && point.x <= box.x + box.width && point.y >= box.y && point.y <= box.y + box.height) return;
+		cam.x = point.x;
+		cam.y = point.y;
+		applyCamera(root, lastBounds);
+	});
+	root.addEventListener('wheel', event => {
+		event.preventDefault();
+		const matrix = root.getScreenCTM();
+		const anchor = matrix && new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+		const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? root.clientHeight : 1;
+		const delta = Math.max(-160, Math.min(160, event.deltaY * unit));
+		zoomBy(Math.exp(-delta * .002), anchor);
+	}, { passive: false });
 }
 const messageLabel = message => '#' + message.seq + ' · ' + label(message.tag) + ' · ' + mention(message.from) + ' → ' + mention(message.to);
 let pendingGraphFocusKey;
@@ -1457,17 +1549,32 @@ function selectGraph(kind, id) {
 	selection = { kind, id };
 	renderGraph();
 }
-function drawNetwork(frame, layout, messages) {
-	const { lanes, points, people, coordinator, laneWidth, xMin, width, height, routes, waitRoutes } = layout;
+function outwardLabel(point) {
+	const cos = Math.cos(point.angle);
+	const offset = point.r + 9;
+	return { x: point.x + cos * offset, y: point.y + Math.sin(point.angle) * offset,
+		'text-anchor': cos > .25 ? 'start' : cos < -.25 ? 'end' : 'middle', 'dominant-baseline': 'central' };
+}
+function starGlyph(x, y, status) {
+	return svg('text', { class: 'star-glyph', x, y, 'data-status': status,
+		'text-anchor': 'middle', 'dominant-baseline': 'central', 'aria-hidden': 'true' }, statusGlyph(status));
+}
+function mentionScope(layout) {
+	if (graphView !== 'Mentions') return;
+	if (selection?.kind === 'member' && layout.people.has(selection.id)) return new Set([selection.id]);
+	if (selection?.kind === 'lane') {
+		const lane = layout.lanes.find(entry => entry.id === selection.id);
+		if (lane) return new Set(lane.members.map(member => member.id));
+	}
+}
+function drawConstellation(frame, layout, messages) {
+	const { lanes, points, people, coordinator, ring1, ring2, treeEdges, bounds, routes, waitRoutes } = layout;
 	const root = byId('graph-svg');
 	const requestedKey = pendingGraphFocusKey;
 	pendingGraphFocusKey = undefined;
 	const oldKey = requestedKey ?? (root.contains(document.activeElement) ? document.activeElement.dataset.key : undefined);
-	const scroller = byId('graph-scroll');
-	const scale = Math.max(.78, Math.min(1.25, (scroller.clientWidth || width) / width));
-	root.setAttribute('viewBox', [xMin, 0, width, height].join(' '));
-	root.setAttribute('width', Math.ceil(width * scale));
-	root.setAttribute('height', Math.ceil(height * scale));
+	lastBounds = bounds;
+	applyCamera(root, bounds);
 	const defs = svg('defs', {});
 	for (const [id, fill] of [['arrow', 'var(--muted)'], ['arrow-peer', 'color-mix(in oklab, var(--brand-cyan) 65%, var(--muted))']]) {
 		const marker = svg('marker', { id, viewBox: '0 0 10 10', refX: 10, refY: 5,
@@ -1475,41 +1582,49 @@ function drawNetwork(frame, layout, messages) {
 		marker.append(svg('path', { class: 'marker-arrow', d: 'M0 0 L10 5 L0 10 Z', fill }));
 		defs.append(marker);
 	}
+	const rings = svg('g', { class: 'constellation-rings', 'aria-hidden': 'true' });
+	if (ring1 > 0) rings.append(svg('circle', { class: 'constellation-ring', cx: 0, cy: 0, r: ring1 }));
+	if (ring2 > 0) rings.append(svg('circle', { class: 'constellation-ring', cx: 0, cy: 0, r: ring2 }));
+	const tree = svg('g', { class: 'constellation-tree', 'aria-hidden': 'true' });
+	for (const d of treeEdges) tree.append(svg('path', { class: 'tree-edge', d }));
 	const regions = svg('g', {});
 	// Put padded hit areas behind all visible strokes so a neighboring edge cannot mask a line.
 	const edgeTargets = svg('g', { 'aria-hidden': 'true' });
 	const arrows = svg('g', {});
 	const nodes = svg('g', {});
 	let focusTarget;
-	const left = CANVAS_PAD + LANE_PAD_X;
-	const right = CANVAS_PAD + laneWidth - LANE_PAD_X;
-	for (const [index, lane] of lanes.entries()) {
-		const id = 'lane-label-clip-' + index;
-		const crop = svg('clipPath', { id });
-		crop.append(svg('rect', { x: left, y: lane.y, width: right - left - (lane.status ? 96 : 0), height: LANE_HEADER_H }));
-		defs.append(crop);
-		const dividerY = lane.y + LANE_HEADER_H;
-		const textY = lane.y + LANE_HEADER_H / 2 + 4;
+	for (const lane of lanes) {
+		const { x, y, r } = lane;
+		const hub = lane.id === 'coordinator';
+		const status = hub ? people.get(coordinator).status : lane.status;
+		const count = lane.totalCount > 0 ? lane.doneCount + '/' + lane.totalCount : '';
+		const text = [clip(lane.title, 22), count].filter(Boolean).join(' · ');
+		const position = hub ? { x, y: HUB_R + 16, 'text-anchor': 'middle' } : outwardLabel(lane);
+		if (!hub) {
+			// Put the horizontal extent of the label along the orbit, not across the member ring.
+			const tangent = (lane.angle * 180 / Math.PI + 180) % 180 - 90;
+			position['text-anchor'] = 'middle';
+			position.transform = 'rotate(' + tangent + ' ' + position.x + ' ' + position.y + ')';
+		}
 		const region = svg('g', { class: 'lane-node' });
 		region.append(
 			svg('title', {}, lane.title),
-			svg('rect', { class: index ? 'lane' : 'lane lane-coord', x: CANVAS_PAD, y: lane.y, width: laneWidth, height: lane.height, rx: 12 }),
-			svg('line', { class: 'lane-divider', x1: left, x2: right, y1: dividerY, y2: dividerY }),
-			svg('text', { class: 'lane-label', x: left, y: textY, 'clip-path': 'url(#' + id + ')' }, lane.title));
-		if (lane.status) region.append(svg('text', { class: 'lane-status', x: right, y: textY,
-			'text-anchor': 'end', 'data-status': lane.status }, statusGlyph(lane.status) + ' ' + label(lane.status)));
+			svg('circle', { class: 'lane-halo', cx: x, cy: y, r: r + 5 }),
+			svg('circle', { class: hub ? 'lane-star lane-coord' : 'lane-star', cx: x, cy: y, r, 'data-status': status }));
+		// The coordinator member supplies the hub's centered glyph.
+		if (!hub) region.append(starGlyph(x, y, status));
+		region.append(svg('text', { class: 'lane-label', ...position }, hub ? lane.title : text));
 		const key = 'lane:' + lane.id;
 		const memberCount = lane.members.length;
-		const name = [lane.title, lane.status ? label(lane.status) : '', memberCount + (memberCount === 1 ? ' member' : ' members')]
-			.filter(Boolean).join(' · ');
+		const name = [hub ? lane.title : text, text.startsWith(lane.title) || hub ? '' : lane.title,
+			label(status), memberCount + (memberCount === 1 ? ' member' : ' members')].filter(Boolean).join(' · ');
 		graphChoice(region, key, name, selection?.kind === 'lane' && selection.id === lane.id, () => selectGraph('lane', lane.id));
 		if (oldKey === key) focusTarget = region;
 		regions.append(region);
 	}
 	for (const message of messages) {
-		const { pair: { from, to, count, corridorX }, pairIndex } = routes.get(message.seq);
-		const bend = 15 + 75 * pairIndex / (pairIndex + 4);
-		const path = edgePath(from, to, bend, pairIndex, count, corridorX);
+		const { pair: { from, to, count }, pairIndex } = routes.get(message.seq);
+		const path = constellationEdgePath(from, to, pairIndex, count);
 		const peer = message.from !== coordinator && message.to !== coordinator && message.from !== message.to && message.tag !== 'spawn';
 		const edgeClass = message.tag === 'spawn' ? ' edge-spawn' : peer ? ' edge-peer' : '';
 		const edge = svg('g', { class: 'message-edge' + edgeClass });
@@ -1530,56 +1645,57 @@ function drawNetwork(frame, layout, messages) {
 		if (oldKey === key) focusTarget = edge;
 		arrows.append(edge);
 	}
-	for (const [memberId, { pair: { from, to, count, corridorX }, pairIndex }] of waitRoutes) {
+	const scope = waitRoutes.size ? mentionScope(layout) : undefined;
+	for (const [memberId, { pair: { from, to, count }, pairIndex }] of waitRoutes) {
+		if (scope && !scope.has(memberId) && !scope.has(coordinator)) continue;
 		const member = people.get(memberId);
 		const wait = svg('g', { class: 'edge-wait' });
 		wait.append(svg('title', {}, mention(member.name) + ' is waiting for the coordinator'),
-			svg('path', { class: 'edge-line', d: edgePath(from, to, -25, pairIndex, count, corridorX), 'marker-end': 'url(#arrow)' }));
+			svg('path', { class: 'edge-line', d: constellationEdgePath(from, to, pairIndex, count), 'marker-end': 'url(#arrow)' }));
 		arrows.append(wait);
 	}
 	for (const member of people.values()) {
-		const { x, y } = points.get(member.id);
+		const point = points.get(member.id);
+		const { x, y, r, depth } = point;
 		const group = svg('g', { class: 'member-node' });
 		const name = mention(member.name);
-		const status = label(member.status);
-		const title = name + ' · ' + status;
+		const title = (depth ? clip(name, 22) : name) + ' · ' + label(member.status);
 		const description = member.description !== member.name ? member.description : '';
-		group.append(svg('title', {}, member.description ? title + ' · ' + member.description : title),
-			svg('rect', { x: x - NODE_W / 2, y: y - NODE_H / 2, width: NODE_W, height: NODE_H, rx: 8 }),
-			svg('text', { x, y: y - (description ? 11 : 3), class: 'member-label', 'text-anchor': 'middle' }, clip(name, 24)));
-		if (description) group.append(svg('text', { x, y: y + 4, class: 'member-desc', 'text-anchor': 'middle' }, clip(description, 28)));
-		group.append(svg('text', { x, y: y + (description ? 19 : 15), class: 'member-status',
-			'data-status': member.status, 'text-anchor': 'middle' }, statusGlyph(member.status) + ' ' + status));
+		const halo = { class: 'member-halo', cx: x, cy: y, r: r + 5 };
+		if (member.status === 'working') halo['data-working'] = 'true';
+		group.append(svg('title', {}, [name + ' · ' + label(member.status), description].filter(Boolean).join(' · ')),
+			svg('circle', halo),
+			svg('circle', { class: 'member-star', cx: x, cy: y, r, 'data-status': member.status }),
+			starGlyph(x, y, member.status));
+		if (depth > 0) {
+			const position = outwardLabel(point);
+			if (description && position['text-anchor'] === 'middle' && y < 0) position.y -= 12;
+			group.append(svg('text', { class: 'member-label', ...position }, clip(name, 22)));
+			if (description) group.append(svg('text', { class: 'member-desc', ...position, y: position.y + 12 }, clip(description, 26)));
+		}
 		const key = 'member:' + member.id;
 		graphChoice(group, key, title, selection?.kind === 'member' && selection.id === member.id, () => selectGraph('member', member.id));
 		if (oldKey === key) focusTarget = group;
 		nodes.append(group);
 	}
-	root.replaceChildren(defs, regions, edgeTargets, arrows, nodes);
-	focusTarget?.focus({ preventScroll: !requestedKey });
-	if (!centered && !byId('panel-Graph').hidden) {
-		scroller.scrollLeft = Math.max(0, (width * scale - scroller.clientWidth) / 2);
-		scroller.scrollTop = 0;
-		centered = true;
+	root.replaceChildren(defs, rings, tree, edgeTargets, arrows, regions, nodes);
+	if (focusTarget) {
+		// Restoring existing focus on a live redraw must not undo a manual pan.
+		restoringGraphFocus = !requestedKey;
+		focusTarget.focus({ preventScroll: !requestedKey });
+		restoringGraphFocus = false;
 	}
 }
 function renderGraph() {
 	const count = snapshot?.messages.length ?? 0;
 	renderPlayback(count);
 	const frame = snapshot ? (followLive ? snapshot : replayFrame()) : { members: [], threads: [], messages: [] };
-	const layout = layoutNetwork(frame);
+	const layout = layoutConstellation(frame);
 	const member = selection?.kind === 'member' ? layout.people.get(selection.id) : undefined;
 	const lane = selection?.kind === 'lane' ? layout.lanes.find(entry => entry.id === selection.id) : undefined;
-	let messages = frame.messages;
-	if (graphView === 'Mentions') {
-		if (member) {
-			messages = messages.filter(message => message.from === member.id || message.to === member.id);
-		} else if (lane) {
-			const laneMemberIds = new Set(lane.members.map(entry => entry.id));
-			messages = messages.filter(message => laneMemberIds.has(message.from) || laneMemberIds.has(message.to));
-		}
-	}
-	drawNetwork(frame, layout, messages);
+	const scope = mentionScope(layout);
+	const messages = scope ? frame.messages.filter(message => scope.has(message.from) || scope.has(message.to)) : frame.messages;
+	drawConstellation(frame, layout, messages);
 	const message = selection?.kind === 'message' ? frame.messages.find(entry => entry.seq === selection.id) : frame.messages.at(-1);
 	const detail = byId('graph-detail');
 	const active = document.activeElement;
@@ -1721,7 +1837,12 @@ byId('play').addEventListener('click', () => {
 	}
 	renderGraph();
 });
-window.addEventListener('resize', () => { if (tab === 'Graph') renderGraph(); });
+const graphRoot = byId('graph-svg');
+wireGraphCamera(graphRoot);
+byId('zoom-in').addEventListener('click', () => zoomBy(1.25));
+byId('zoom-out').addEventListener('click', () => zoomBy(1 / 1.25));
+byId('zoom-fit').addEventListener('click', resetCamera);
+window.addEventListener('resize', () => { if (tab === 'Graph') applyCamera(graphRoot, lastBounds); });
 
 function renderConnection() {
 	const status = byId('run-status');
@@ -1739,7 +1860,7 @@ function applySnapshot(next) {
 		followLive = true;
 		selection = undefined;
 		openedPayloads.clear();
-		centered = false;
+		resetCamera();
 	}
 	snapshot = next;
 	retainedSeqs = new Set(next.messages.map(message => message.seq));
