@@ -919,4 +919,89 @@ describe("ompSwarmExtension", () => {
 			await command.handler("stop", ctx);
 		}
 	});
+
+	test("derives descriptive batch titles and member descriptions without bogus @task participant", async () => {
+		const { default: ompSwarmExtension, deriveBatchTitle, describeTask } = await import(EXT);
+		expect(deriveBatchTitle({ i: "Spawning wave 1" }, [{ name: "S1" }])).toBe("Spawning wave 1");
+		expect(deriveBatchTitle({ context: "# Goal\nFix login redirect bug\n\n# Contract\n..." }, [{ name: "S1" }, { name: "S2" }])).toBe("Fix login redirect bug");
+		expect(deriveBatchTitle({}, [{ name: "FixTools" }, { name: "FixWizard" }])).toBe("FixTools, FixWizard");
+		expect(deriveBatchTitle({}, [{ name: "Rev1", agent: "adversarial-reviewer" }, { name: "Rev2", agent: "adversarial-reviewer-alt" }])).toBe("Review: Rev1, Rev2");
+		expect(deriveBatchTitle({}, [{ name: "MapUI", agent: "scout" }, { name: "MapAPI", agent: "scout" }])).toBe("Scout: MapUI, MapAPI");
+		expect(deriveBatchTitle({}, [{ name: "S1", task: '{"id":"S1","owns":["extensions/omp-swarm/ui.ts"]}' }])).toBe("extensions/omp-swarm/ui.ts");
+		expect(deriveBatchTitle({}, [{}])).toBe("Task batch");
+
+		expect(describeTask({ task: '{"id":"S1","owns":["[NEW] src/foo.ts"]}' })).toBe("src/foo.ts");
+		expect(describeTask({ solutionSpace: "one fix: compact header layout" })).toBe("one fix: compact header layout");
+		expect(describeTask({ task: "# Target\nCompact the swarm header" })).toBe("Compact the swarm header");
+		expect(describeTask({ name: "Empty" })).toBe("");
+
+		const handlers = new Map<string, ExtensionHandler[]>();
+		const commands = new Map<string, ExtensionCommand>();
+		const notes: string[] = [];
+		ompSwarmExtension(
+			{
+				on: (event: string, handler: ExtensionHandler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+				registerCommand: (name: string, command: ExtensionCommand) => commands.set(name, command),
+			},
+			{ openUrl: () => false },
+		);
+		const ctx: ExtensionContext = {
+			cwd: ".",
+			agent: { kind: "main", id: "main", name: "main", depth: 0 },
+			models: { current: () => ({ id: "m" }) },
+			ui: { notify: (m: string) => notes.push(m) },
+		};
+		const command = commands.get("omp-swarm")!;
+		const emit = async (event: string, payload: Record<string, unknown>) => {
+			for (const h of handlers.get(event) ?? []) await h({ type: event, ...payload }, ctx);
+		};
+		try {
+			await command.handler("reset", ctx);
+			await command.handler("stop", ctx);
+			notes.length = 0;
+			await emit("tool_call", {
+				toolName: "task",
+				toolCallId: "d1",
+				input: {
+					tasks: [
+						{ name: "FixTools", agent: "synth", solutionSpace: "fix tool wiring" },
+						{ name: "FixWizard", agent: "synth", task: '{"id":"FixWizard","owns":["src/wizard.ts"]}' },
+						{ name: "Bare", agent: "synth" },
+					],
+				},
+			});
+			await emit("tool_result", {
+				toolName: "task",
+				toolCallId: "d1",
+				content: [{ type: "text", text: "Spawned 3 background agents." }],
+				isError: false,
+			});
+			const url = notes.map(n => n.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]).find(Boolean);
+			expect(url).toBeDefined();
+			const snap = (await (await fetch(`${url}/api/state`)).json()) as SwarmSnapshot;
+			expect(snap.threads[0]?.title).toBe("FixTools, FixWizard, Bare");
+			expect(snap.members.find(m => m.id === "FixTools")?.description).toBe("fix tool wiring");
+			expect(snap.members.find(m => m.id === "FixWizard")?.description).toBe("src/wizard.ts");
+			expect(snap.members.find(m => m.id === "Bare")?.description).toBe("");
+			expect(snap.messages.some(m => m.from === "task")).toBe(false);
+		} finally {
+			await command.handler("stop", ctx);
+		}
+	});
+});
+
+describe("renderSwarmHtml", () => {
+	test("renders Linear-dense compact layout with auto light/dark tokens and status cues", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const html = renderSwarmHtml();
+		expect(html).toContain('<meta name="color-scheme" content="light dark">');
+		expect(html).toContain("color-scheme: light dark");
+		expect(html).toContain("light-dark(");
+		expect(html).toContain("@media (prefers-color-scheme: dark)");
+		expect(html).toContain("@media (forced-colors: active)");
+		expect(html).toContain("@media (pointer: coarse)");
+		expect(html).toContain("dense-list");
+		expect(html).toContain('aria-label="Status key"');
+		expect(html).toContain("statusGlyph");
+	});
 });

@@ -7,7 +7,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseObject(raw: string): Record<string, unknown> | null {
+export function parseObject(raw: string): Record<string, unknown> | null {
 	try {
 		const value: unknown = JSON.parse(raw);
 		return isObject(value) ? value : null;
@@ -200,7 +200,7 @@ export class SwarmStore implements SwarmStoreLike {
 		this.publish();
 	}
 
-	recordTaskBatch(batchTitle: string, tasks: Array<{ name?: string; agent?: string; task?: string }>): string {
+	recordTaskBatch(batchTitle: string, tasks: Array<{ name?: string; agent?: string; task?: string; description?: string }>): string {
 		let id: string;
 		do id = `thread-${this.nextThreadId++}`;
 		while (this.threads.has(id));
@@ -215,6 +215,7 @@ export class SwarmStore implements SwarmStoreLike {
 			}
 			const worker = this.members.get(memberId) ?? this.addMember(memberId, memberId, task.agent ?? "Worker", "sub", createdAt);
 			const member = worker.member;
+			if (!member.description) member.description = task.description?.trim() ?? "";
 			if (worker.spawned || member.status === "retired") member.startedAt = createdAt;
 			member.role = task.agent ?? member.role;
 			member.kind = "sub";

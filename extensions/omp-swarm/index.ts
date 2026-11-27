@@ -1,5 +1,5 @@
 import { startSwarmServer } from "./server";
-import { extractAgentTarget, parseScreenshots, SwarmStore } from "./state";
+import { extractAgentTarget, parseObject, parseScreenshots, SwarmStore } from "./state";
 import type { ExtensionAPI, ExtensionContext, ExtensionEventName, SwarmServerHandle } from "./types";
 
 const COORDINATOR = "coordinator";
@@ -10,13 +10,64 @@ const store = new SwarmStore({ onAutoStart: () => { autoStartPending = true; } }
 let server: SwarmServerHandle | null = null;
 let stallTimer: NodeJS.Timeout | null = null;
 
-type Task = Parameters<SwarmStore["recordTaskBatch"]>[1][number];
+type Task = Parameters<typeof describeTask>[0];
 
 function isTask(value: unknown): value is Task {
 	return typeof value === "object" && value !== null && !Array.isArray(value) &&
 		(!("name" in value) || value.name === undefined || typeof value.name === "string") &&
 		(!("agent" in value) || value.agent === undefined || typeof value.agent === "string") &&
-		(!("task" in value) || value.task === undefined || typeof value.task === "string");
+		(!("task" in value) || value.task === undefined || typeof value.task === "string") &&
+		(!("solutionSpace" in value) || value.solutionSpace === undefined || typeof value.solutionSpace === "string");
+}
+
+function firstProseLine(lines: string[], start = 0): string {
+	for (let i = start; i < lines.length; i++) {
+		const line = lines[i].trim();
+		if (!line || line.startsWith("#")) continue;
+		const prose = line.replace(/^(?:[-*][ \t]+|#+[ \t]*)+/, "");
+		const cleaned = (prose.startsWith("`") ? prose.replace(/^`+|`+$/g, "") : prose).trim();
+		if (cleaned) return cleaned;
+	}
+	return "";
+}
+
+export function describeTask(task: { name?: string; agent?: string; task?: string; solutionSpace?: string }): string {
+	const text = task.task?.trim();
+	if (text) {
+		const slice = parseObject(text);
+		const newTag = /^\[NEW\]\s*/;
+		const owned: unknown = Array.isArray(slice?.owns) ? slice.owns[0] : undefined;
+		const path = typeof owned === "string" ? owned.trim().replace(newTag, "") : "";
+		if (path) return path.slice(0, 72);
+		const symbol: unknown = Array.isArray(slice?.symbols) ? slice.symbols[0] : undefined;
+		if (typeof symbol === "object" && symbol !== null && "name" in symbol && typeof symbol.name === "string") {
+			const name = symbol.name.trim().replace(newTag, "");
+			if (name) return name.slice(0, 72);
+		}
+	}
+	return (task.solutionSpace?.trim() || (text ? firstProseLine(text.split(/\r?\n/)) : "")).slice(0, 72);
+}
+
+export function deriveBatchTitle(input: Record<string, unknown>, tasks: Array<{ name?: string; agent?: string; task?: string; solutionSpace?: string }>): string {
+	const intent = typeof input.i === "string" ? input.i.trim() : "";
+	if (intent) return intent.slice(0, 52);
+	if (typeof input.context === "string") {
+		const lines = input.context.split(/\r?\n/);
+		const goal = lines.findIndex(line => /^#[ \t]+goal(?:[ \t]+#+)?$/i.test(line.trim()));
+		const title = (goal >= 0 && firstProseLine(lines, goal + 1)) || firstProseLine(lines);
+		if (title.length >= 4 && !/^adversarial second-opinion review/i.test(title)) return title.slice(0, 52);
+	}
+	if (tasks.length === 1) return (describeTask(tasks[0]) || tasks[0].name?.trim() || "Task batch").slice(0, 52);
+	if (tasks.length > 1) {
+		const names = tasks.map(task => task.name?.trim()).filter(Boolean);
+		if (names.length) {
+			const prefix = tasks.every(task => /review/i.test(task.agent ?? "")) ? "Review: "
+				: tasks.every(task => task.agent === "scout") ? "Scout: " : "";
+			const rest = names.length > 3 ? ` +${names.length - 3}` : "";
+			return `${prefix}${names.slice(0, 3).join(", ")}${rest}`.slice(0, 52);
+		}
+	}
+	return "Task batch";
 }
 
 function readText(content: unknown): string | undefined {
@@ -226,8 +277,10 @@ export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?
 		if (event.toolName === "task") {
 			const tasks = "tasks" in input ? input.tasks : undefined;
 			if (!Array.isArray(tasks) || !tasks.length || !tasks.every(isTask)) return;
-			const title = "i" in input && typeof input.i === "string" ? input.i.trim() : "";
-			store.recordTaskBatch(title || "Task batch", tasks);
+			store.recordTaskBatch(
+				deriveBatchTitle(input as Record<string, unknown>, tasks),
+				tasks.map(task => ({ ...task, description: describeTask(task) })),
+			);
 			ensureStallTimer(ctx.ui);
 			if (autoStartPending) {
 				server ??= startSwarmServer(store);
@@ -252,10 +305,6 @@ export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?
 		if (frames.length) {
 			const lines = frames.map(({ path, caption }) => `Screenshot: ${path} | ${caption}`).join("\n");
 			store.recordAgentMessage(from, COORDINATOR, lines, "info");
-		}
-		if (event.toolName === "task") {
-			const summary = text.trim();
-			if (summary) store.recordAgentMessage("task", from, summary.slice(0, SNIPPET_LENGTH));
 		}
 	});
 
