@@ -775,4 +775,148 @@ describe("ompSwarmExtension", () => {
 			}
 		}
 	});
+
+	test("ompSwarmExtension opens browser on /omp-swarm and posts zero-token chat messages", async () => {
+		const { default: ompSwarmExtension, browserOpenCommand, openSwarmUrl } = await import(EXT);
+		expect(browserOpenCommand("http://127.0.0.1:4321", "win32")).toEqual(["rundll32.exe", "url.dll,FileProtocolHandler", "http://127.0.0.1:4321"]);
+		expect(browserOpenCommand("http://127.0.0.1:4321", "darwin")).toEqual(["open", "http://127.0.0.1:4321"]);
+		expect(browserOpenCommand("http://127.0.0.1:4321", "linux")).toEqual(["xdg-open", "http://127.0.0.1:4321"]);
+		const realSpawn = Bun.spawn;
+		let spawnCalls = 0;
+		Bun.spawn = ((...args: Parameters<typeof Bun.spawn>) => {
+			spawnCalls++;
+			return realSpawn(...args);
+		}) as typeof Bun.spawn;
+		try {
+			expect(openSwarmUrl("https://example.com")).toBe(false);
+			expect(openSwarmUrl("http://example.com:4321")).toBe(false);
+			expect(openSwarmUrl("file:///etc/passwd")).toBe(false);
+			expect(spawnCalls).toBe(0);
+		} finally {
+			Bun.spawn = realSpawn;
+		}
+
+		const notes: string[] = [];
+		const sent: Array<{ message: Record<string, unknown>; options?: Record<string, unknown> }> = [];
+		const opened: string[] = [];
+		const handlers = new Map<string, ExtensionHandler[]>();
+		const commands = new Map<string, ExtensionCommand>();
+		let throwSend = false;
+		let throwOpen = false;
+		ompSwarmExtension(
+			{
+				on: (event: string, handler: ExtensionHandler) => handlers.set(event, [...(handlers.get(event) ?? []), handler]),
+				registerCommand: (name: string, command: ExtensionCommand) => commands.set(name, command),
+				sendMessage: (message, options) => {
+					if (throwSend) throw new Error("send failed");
+					sent.push({ message: message as unknown as Record<string, unknown>, options: options as unknown as Record<string, unknown> });
+				},
+			},
+			{
+				openUrl: (url: string) => {
+					if (throwOpen) throw new Error("spawn failed");
+					opened.push(url);
+					return true;
+				},
+			},
+		);
+		const makeCtx = (overrides: Partial<ExtensionContext> = {}): ExtensionContext => ({
+			cwd: ".",
+			hasUI: true,
+			mode: "tui",
+			agent: { kind: "main", id: "main", name: "main", depth: 0 },
+			models: { current: () => ({ id: "model-main" }) },
+			ui: { notify: (message: string) => notes.push(message) },
+			...overrides,
+		});
+		const command = commands.get("omp-swarm")!;
+		const ctx = makeCtx();
+		const emit = async (event: string, payload: Record<string, unknown>) => {
+			for (const h of handlers.get(event) ?? []) await h({ type: event, ...payload }, ctx);
+		};
+		const prevNoOpen = process.env.OMP_SWARM_NO_OPEN;
+		delete process.env.OMP_SWARM_NO_OPEN;
+		try {
+			await command.handler("reset", ctx);
+			await command.handler("stop", ctx);
+			notes.length = 0;
+			sent.length = 0;
+			opened.length = 0;
+
+			// Auto-start at 3 subagents posts in chat without opening a browser window.
+			await emit("tool_call", { toolName: "task", toolCallId: "a1", input: { tasks: [{ name: "A1" }, { name: "A2" }, { name: "A3" }] } });
+			expect(opened).toEqual([]);
+			expect(sent).toHaveLength(1);
+			expect(sent[0].message).toMatchObject({ customType: "omp-swarm", display: true, excludeFromContext: true });
+			expect(sent[0].options).toEqual({ triggerTurn: false });
+			const autoUrl = String(sent[0].message.content).match(/http:\/\/127\.0\.0\.1:\d+/)?.[0];
+			expect(autoUrl).toBeDefined();
+
+			// Explicit /omp-swarm opens the browser and posts status in chat.
+			notes.length = 0;
+			sent.length = 0;
+			await command.handler("", ctx);
+			expect(opened).toEqual([autoUrl!]);
+			expect(sent).toHaveLength(1);
+			expect(sent[0].message).toMatchObject({ customType: "omp-swarm", display: true, excludeFromContext: true });
+			expect(sent[0].options).toEqual({ triggerTurn: false });
+			expect(String(sent[0].message.content)).toContain(autoUrl!);
+			expect(String(sent[0].message.content)).toContain("0/3 tasks done");
+			expect(notes[0]).toContain("opened in browser");
+
+			// Non-interactive contexts and OMP_SWARM_NO_OPEN=1 skip browser launch but still post in chat and notify.
+			const suppressed: Array<() => Promise<void>> = [
+				() => command.handler("", makeCtx({ hasUI: false })),
+				() => command.handler("", makeCtx({ mode: "print" })),
+				() => command.handler("", makeCtx({ mode: "json" })),
+				async () => {
+					process.env.OMP_SWARM_NO_OPEN = "1";
+					try {
+						await command.handler("", ctx);
+					} finally {
+						delete process.env.OMP_SWARM_NO_OPEN;
+					}
+				},
+			];
+			for (const run of suppressed) {
+				opened.length = 0;
+				sent.length = 0;
+				notes.length = 0;
+				await run();
+				expect(opened).toEqual([]);
+				expect(sent).toHaveLength(1);
+				expect(sent[0].message).toMatchObject({ customType: "omp-swarm", display: true, excludeFromContext: true });
+				expect(sent[0].options).toEqual({ triggerTurn: false });
+				expect(notes).toHaveLength(1);
+			}
+
+			// Failure in openUrl still posts chat and notifies without throwing.
+			notes.length = 0;
+			sent.length = 0;
+			throwOpen = true;
+			throwSend = false;
+			await command.handler("", ctx);
+			expect(sent).toHaveLength(1);
+			expect(notes.some(n => n.includes(autoUrl!) && !n.includes("opened in browser"))).toBe(true);
+
+			// Failure in sendMessage still notifies on /omp-swarm and on fresh auto-start.
+			notes.length = 0;
+			throwOpen = false;
+			throwSend = true;
+			await command.handler("", ctx);
+			expect(notes.some(n => n.includes(autoUrl!))).toBe(true);
+
+			await command.handler("reset", ctx);
+			await command.handler("stop", ctx);
+			notes.length = 0;
+			opened.length = 0;
+			await emit("tool_call", { toolName: "task", toolCallId: "a2", input: { tasks: [{ name: "B1" }, { name: "B2" }, { name: "B3" }] } });
+			expect(opened).toEqual([]);
+			expect(notes.some(n => /http:\/\/127\.0\.0\.1:\d+/.test(n))).toBe(true);
+		} finally {
+			if (prevNoOpen === undefined) delete process.env.OMP_SWARM_NO_OPEN;
+			else process.env.OMP_SWARM_NO_OPEN = prevNoOpen;
+			await command.handler("stop", ctx);
+		}
+	});
 });

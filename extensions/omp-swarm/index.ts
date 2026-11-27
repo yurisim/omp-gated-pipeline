@@ -111,7 +111,37 @@ function stopServer(): void {
 	running?.stop();
 }
 
-export default function ompSwarmExtension(pi: ExtensionAPI): void {
+export function browserOpenCommand(url: string, platform: NodeJS.Platform = process.platform): [string, ...string[]] {
+	switch (platform) {
+		case "win32": return ["rundll32.exe", "url.dll,FileProtocolHandler", url];
+		case "darwin": return ["open", url];
+		default: return ["xdg-open", url];
+	}
+}
+
+export function openSwarmUrl(url: string): boolean {
+	if (!/^http:\/\/(?:127\.0\.0\.1|\[::1\]):\d+$/.test(url)) return false;
+	try {
+		const proc = Bun.spawn(browserOpenCommand(url), { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+		proc.unref();
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function canOpenBrowser(ctx: ExtensionContext): boolean {
+	return ctx.hasUI === true && ctx.mode !== "print" && ctx.mode !== "json" && process.env.OMP_SWARM_NO_OPEN !== "1";
+}
+
+function postSwarmChat(pi: ExtensionAPI, content: string): void {
+	try {
+		pi.sendMessage?.({ customType: "omp-swarm", content, display: true, excludeFromContext: true }, { triggerTurn: false });
+	} catch { /* A chat failure must not suppress the notification. */ }
+}
+
+export default function ompSwarmExtension(pi: ExtensionAPI, options?: { openUrl?: (url: string) => boolean }): void {
+	const openUrl = options?.openUrl ?? openSwarmUrl;
 	// Factories are rebound for child sessions. Only plan-review correlation is session-local.
 	let pendingPlan: { id: string; title: string } | undefined;
 
@@ -122,7 +152,7 @@ export default function ompSwarmExtension(pi: ExtensionAPI): void {
 	}
 
 	pi.registerCommand("omp-swarm", {
-		description: "Show the local Swarm UI, or use stop or reset",
+		description: "Open the local Swarm UI in browser and chat, or use stop or reset",
 		async handler(args, ctx) {
 			try {
 				switch (args.trim()) {
@@ -140,7 +170,13 @@ export default function ompSwarmExtension(pi: ExtensionAPI): void {
 					default: {
 						server ??= startSwarmServer(store);
 						const { doneTasks, totalTasks } = store.getSnapshot();
-						ctx.ui.notify(`Swarm: ${server.url} (${doneTasks}/${totalTasks} tasks done)`, "info");
+						const summary = `Swarm UI: ${server.url} (${doneTasks}/${totalTasks} tasks done)`;
+						let opened = false;
+						if (canOpenBrowser(ctx)) {
+							try { opened = openUrl(server.url); } catch { /* Keep the URL available in chat. */ }
+						}
+						postSwarmChat(pi, summary);
+						ctx.ui.notify(opened ? `${summary} — opened in browser` : summary, "info");
 					}
 				}
 			} catch (error) {
@@ -196,7 +232,9 @@ export default function ompSwarmExtension(pi: ExtensionAPI): void {
 			if (autoStartPending) {
 				server ??= startSwarmServer(store);
 				autoStartPending = false;
-				ctx.ui.notify(`Swarm: ${server.url}`, "info");
+				const summary = `Swarm UI: ${server.url}`;
+				postSwarmChat(pi, summary);
+				ctx.ui.notify(summary, "info");
 			}
 		} else if ("path" in input && typeof input.path === "string" &&
 			"content" in input && typeof input.content === "string") {

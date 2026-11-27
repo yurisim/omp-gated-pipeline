@@ -132,9 +132,22 @@ export interface ExtensionAgentInfo {
 
 export interface ExtensionContext {
 	cwd?: string;
+	hasUI?: boolean;
+	mode?: "tui" | "rpc" | "json" | "print";
 	agent?: ExtensionAgentInfo;
 	models?: { current(): { id: string } | null | undefined };
 	ui: { notify(message: string, level?: "info" | "warning" | "error"): void };
+}
+
+export interface ExtensionCustomMessage {
+	customType: string;
+	content: string;
+	display: boolean;
+	excludeFromContext?: boolean;
+}
+
+export interface ExtensionSendMessageOptions {
+	triggerTurn?: boolean;
 }
 
 // Host events are untyped at this boundary; handlers narrow fields with type guards.
@@ -159,4 +172,5 @@ export interface ExtensionCommand {
 export interface ExtensionAPI {
 	on(event: ExtensionEventName, handler: ExtensionHandler): void;
 	registerCommand(name: string, command: ExtensionCommand): void;
+	sendMessage?(message: ExtensionCustomMessage, options?: ExtensionSendMessageOptions): void;
 }
