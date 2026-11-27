@@ -201,6 +201,13 @@ export class SwarmStore implements SwarmStoreLike {
 			if (info.threadId !== undefined) this.moveMember(member, info.threadId);
 			member.lastActivityAt = now;
 			if (this.stalls.get(info.id)?.ownerEditSeq === null) this.stalls.delete(info.id);
+			if (info.kind === "sub" && member.status !== "working") {
+				member.status = "working";
+				member.endedAt = null;
+			} else if (info.kind === "main" && member.status === "retired") {
+				member.status = "active";
+				member.endedAt = null;
+			}
 		} else {
 			const { member } = this.addMember(info.id, info.name, info.role, info.kind, now, info.model);
 			if (info.threadId !== undefined) this.moveMember(member, info.threadId);
@@ -269,9 +276,14 @@ export class SwarmStore implements SwarmStoreLike {
 
 	noteActivity(memberId: string): void {
 		const member = this.members.get(memberId)?.member;
-		if (!member || member.status === "retired") return;
+		if (!member) return;
 		member.lastActivityAt = Date.now();
 		this.stalls.delete(memberId);
+		if (member.kind === "sub" && member.status !== "working") {
+			member.status = "working";
+			member.endedAt = null;
+			this.publish();
+		}
 	}
 
 	completeMember(id: string, outputText: string, isError = false): void {
@@ -282,8 +294,8 @@ export class SwarmStore implements SwarmStoreLike {
 		const { member } = entry;
 		if (entry.spawned) this.doneTasks += Number(outcome === "done") - Number(entry.outcome === "done");
 		entry.outcome = outcome;
-		if (member.status !== "retired") member.status = outcome;
-		member.endedAt ??= Date.now();
+		member.status = outcome;
+		member.endedAt = Date.now();
 		this.appendMessage(id, this.mainId, outputText, outcome, payload);
 		this.publish();
 	}
@@ -521,6 +533,10 @@ export class SwarmStore implements SwarmStoreLike {
 		}
 		if (tag === "stall") return message;
 		if (sender) {
+			if (sender.member.kind === "sub" && tag !== "done" && tag !== "blocked" && sender.member.status !== "working") {
+				sender.member.status = "working";
+				sender.member.endedAt = null;
+			}
 			sender.lastSentSeq = message.seq;
 			sender.member.lastActivityAt = timestamp;
 			sender.member.lastMessage = message.text;

@@ -133,6 +133,55 @@ describe("SwarmStore", () => {
 		expect(snap.threads).toHaveLength(0);
 	});
 
+	test.each([
+		["noteActivity", "done"],
+		["registerMember", "blocked"],
+		["recordAgentMessage", "done"],
+	] as const)("SwarmStore revives a retired subagent via %s before completing it as %s", async (trigger, outcome) => {
+		const { SwarmStore } = await import(STATE);
+		setSystemTime(new Date(T0));
+		try {
+			const store = new SwarmStore();
+			const worker = { id: "S1", name: "S1", role: "synth", kind: "sub" as const };
+			store.recordTaskBatch("Wave 1", [{ name: worker.id }]);
+			const member = () => store.getSnapshot().members.find(m => m.id === worker.id);
+			store.retireMember(worker.id);
+			expect(member()).toMatchObject({ status: "retired", endedAt: T0 });
+
+			setSystemTime(new Date(T0 + 1));
+			switch (trigger) {
+				case "noteActivity": store.noteActivity(worker.id); break;
+				case "registerMember": store.registerMember(worker); break;
+				case "recordAgentMessage": store.recordAgentMessage(worker.id, COORD.id, "Back at work"); break;
+			}
+			expect(member()).toMatchObject({ status: "working", endedAt: null });
+
+			setSystemTime(new Date(T0 + 2));
+			store.completeMember(worker.id, "Run finished", outcome === "blocked");
+			expect(member()).toMatchObject({ status: outcome, endedAt: T0 + 2 });
+		} finally {
+			setSystemTime();
+		}
+	});
+
+	test("SwarmStore accepts a completion that arrives after retirement", async () => {
+		const { SwarmStore } = await import(STATE);
+		setSystemTime(new Date(T0));
+		try {
+			const store = new SwarmStore();
+			store.recordTaskBatch("Wave 1", [{ name: "S1" }]);
+			store.retireMember("S1");
+
+			setSystemTime(new Date(T0 + 1));
+			store.completeMember("S1", "Run finished");
+			const snap = store.getSnapshot();
+			expect(snap.members.find(m => m.id === "S1")).toMatchObject({ status: "done", endedAt: T0 + 1 });
+			expect(snap.doneTasks).toBe(1);
+		} finally {
+			setSystemTime();
+		}
+	});
+
 	test("SwarmStore single wave of three fires auto-start once", async () => {
 		const { SwarmStore } = await import(STATE);
 		let fired = 0;
@@ -670,7 +719,7 @@ describe("SwarmServer", () => {
 });
 
 describe("ompSwarmExtension", () => {
-	test("ompSwarmExtension observes fanout across rebound sessions and auto-starts at three subagents", async () => {
+	async function bindSessions() {
 		const { default: ompSwarmExtension } = await import(EXT);
 		const notes: string[] = [];
 		// omp calls the factory once per session (main and each subagent) in one process.
@@ -697,6 +746,11 @@ describe("ompSwarmExtension", () => {
 		};
 		const urlFromNotes = () => notes.map(n => n.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0]).find(Boolean);
 		const state = async (url: string) => (await (await fetch(`${url}/api/state`)).json()) as SwarmSnapshot;
+		return { bind, notes, state, urlFromNotes };
+	}
+
+	test("ompSwarmExtension observes fanout across rebound sessions and auto-starts at three subagents", async () => {
+		const { bind, notes, state, urlFromNotes } = await bindSessions();
 
 		const main = bind("main", "main");
 		expect(main.command).toBeDefined();
@@ -766,6 +820,39 @@ describe("ompSwarmExtension", () => {
 			expect((await fetch(`${onDemand}/api/state`)).status).toBe(200);
 			await main.command!.handler("stop", main.ctx);
 			await expect(fetch(`${onDemand}/api/state`)).rejects.toThrow();
+		} finally {
+			await main.command?.handler("stop", main.ctx);
+		}
+	});
+
+	test("ompSwarmExtension revives a retired child on session start or tool activity and records its completion", async () => {
+		const { bind, state, urlFromNotes } = await bindSessions();
+		const main = bind("main", "main");
+		const child = bind("sub", "S1");
+		try {
+			await main.command!.handler("reset", main.ctx);
+			await main.emit("session_start", {});
+			await main.emit("tool_call", { toolName: "task", toolCallId: "spawn-S1", input: { tasks: [{ name: "S1" }] } });
+			await child.emit("session_start", {});
+			await main.command!.handler("", main.ctx);
+			const url = urlFromNotes();
+			expect(url).toBeDefined();
+			const member = async () => (await state(url!)).members.find(m => m.id === "S1");
+
+			await child.emit("session_shutdown", {});
+			expect(await member()).toMatchObject({ status: "retired", endedAt: expect.any(Number) });
+			await child.emit("session_start", {});
+			expect(await member()).toMatchObject({ status: "working", endedAt: null });
+
+			await child.emit("session_shutdown", {});
+			expect(await member()).toMatchObject({ status: "retired", endedAt: expect.any(Number) });
+			await child.emit("tool_call", { toolName: "bash", toolCallId: "resumed-tool", input: { command: "pwd" } });
+			expect(await member()).toMatchObject({ status: "working", endedAt: null });
+
+			await child.emit("agent_end", { messages: [{ role: "assistant", content: [{ type: "text", text: "Run finished" }] }] });
+			const snap = await state(url!);
+			expect(snap.members.find(m => m.id === "S1")).toMatchObject({ status: "done", endedAt: expect.any(Number) });
+			expect(snap.doneTasks).toBe(1);
 		} finally {
 			await main.command?.handler("stop", main.ctx);
 		}
@@ -1298,13 +1385,131 @@ describe("renderSwarmHtml", () => {
 		expect(html).not.toContain("innerHTML");
 	});
 
-	test("wraps hive cell titles onto two lines and renders wider chips with member descriptions", async () => {
+	test("renders Network swimlanes and peer arcs with wider member cards and descriptions", async () => {
 		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
 		const html = renderSwarmHtml();
-		expect(html).toContain("function wrapLines(");
-		expect(html).toContain("svg('tspan'");
+		expect(html).toContain("function layoutNetwork(");
+		expect(html).toContain("function drawNetwork(");
+		expect(html).toContain('data-view="Network"');
+		expect(html).toContain(".lane {");
+		expect(html).toContain(".edge-peer .edge-line");
+		expect(html).toContain("url(#arrow-peer)");
 		expect(html).toContain(".member-desc");
-		expect(html).toContain("const NODE_W = 168;");
-		expect(html).toContain("clip(name, 22)");
+		expect(html).toContain("const NODE_W = 180;");
+		expect(html).not.toContain("hexSlots");
+		expect(html).not.toContain('data-view="Hive"');
+	});
+
+	test("routes Network edges clear of cards without moving member points in Mentions", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const { SwarmStore } = await import(STATE);
+		const store = new SwarmStore();
+		store.registerMember(COORD);
+		store.recordTaskBatch("Wave 1", ["S1", "S2", "S3", "S4"].map(name => ({ name })));
+		store.recordTaskBatch("Wave 2", ["S5", "S6"].map(name => ({ name })));
+		store.recordAgentMessage("S6", COORD.id, "Wave 2 report");
+		store.recordAgentMessage("S1", "S2", "Adjacent peer");
+		store.recordAgentMessage("S1", "S3", "Two columns apart");
+		const frame = store.getSnapshot();
+
+		// Capture the SVG drawn by the real layout and router without starting listeners or fetching state.
+		class Element {
+			readonly attributes = new Map<string, string>();
+			readonly dataset: Record<string, string> = {};
+			children: Element[] = [];
+			constructor(readonly tag: string) {}
+			setAttribute(name: string, value: string) { this.attributes.set(name, String(value)); }
+			append(...children: (Element | string)[]) {
+				for (const child of children) if (child instanceof Element) this.children.push(child);
+			}
+			prepend() {}
+			replaceChildren(...children: Element[]) { this.children = children; }
+			querySelectorAll() { return []; }
+			contains() { return false; }
+			addEventListener() {}
+		}
+		const elements = new Map<string, Element>();
+		const document = {
+			getElementById(id: string) {
+				if (!elements.has(id)) elements.set(id, new Element(id));
+				return elements.get(id)!;
+			},
+			createElement: (tag: string) => new Element(tag),
+			createElementNS: (_ns: string, tag: string) => new Element(tag),
+			createDocumentFragment: () => new Element("fragment"),
+			createTextNode: (text: string) => text,
+		};
+		const script = renderSwarmHtml().match(/<script>([\s\S]*?)<\/script>/)![1];
+		const boot = script.indexOf("\nconst views =");
+		expect(boot).toBeGreaterThan(0);
+		const render = new Function("document", `${script.slice(0, boot)}
+			return (frame, view, memberId) => {
+				snapshot = frame;
+				graphView = view;
+				selection = { kind: 'member', id: memberId };
+				renderGraph();
+			};`)(document) as (frame: SwarmSnapshot, view: "Network" | "Mentions", memberId: string) => void;
+		const graph = document.getElementById("graph-svg");
+		const graphGroups = () => graph.children.flatMap(layer => layer.children);
+		const cards = () => graphGroups().filter(group => group.dataset.key?.startsWith("member:")).map(group => {
+			const rect = group.children.find(child => child.tag === "rect")!;
+			return {
+				id: group.dataset.key.slice("member:".length),
+				x: Number(rect.attributes.get("x")), y: Number(rect.attributes.get("y")),
+				width: Number(rect.attributes.get("width")), height: Number(rect.attributes.get("height")),
+			};
+		});
+		const edges = () => graphGroups().filter(group => group.dataset.key?.startsWith("message:")).map(group => ({
+			seq: Number(group.dataset.key.slice("message:".length)),
+			path: group.children.find(child => child.tag === "path")!.attributes.get("d")!,
+		}));
+
+		render(frame, "Network", COORD.id);
+		const networkCards = cards();
+		expect(networkCards.map(card => card.id)).toEqual(frame.members.map(member => member.id));
+		const networkEdges = edges();
+		expect(networkEdges.map(edge => edge.seq)).toEqual(frame.messages.map(message => message.seq));
+		for (const { seq, path } of networkEdges) {
+			const { from, to } = frame.messages.find(message => message.seq === seq)!;
+			const otherCards = networkCards.filter(card => card.id !== from && card.id !== to);
+			const tokens = path.match(/[a-z]|[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi)!;
+			expect(tokens.shift()).toBe("M");
+			let x = Number(tokens.shift()), y = Number(tokens.shift());
+			expect(tokens.length).toBeGreaterThan(0);
+			for (let i = 0; i < tokens.length;) {
+				const command = tokens[i++];
+				const controls = [[x, y]];
+				switch (command) {
+					case "H": controls.push([Number(tokens[i++]), y]); break;
+					case "V": controls.push([x, Number(tokens[i++])]); break;
+					case "C": case "Q": case "L": {
+						const count = command === "C" ? 3 : command === "Q" ? 2 : 1;
+						for (let j = 0; j < count; j++) controls.push([Number(tokens[i++]), Number(tokens[i++])]);
+						break;
+					}
+					default: throw new Error(`Unexpected SVG path command ${command}: ${path}`);
+				}
+				if (!controls.flat().every(Number.isFinite)) throw new Error(`Invalid coordinates in edge #${seq}: ${path}`);
+				// De Casteljau interpolation handles lines and Bézier curves alike.
+				for (let step = 1; step <= 64 && (step < 64 || i < tokens.length); step++) {
+					const t = step / 64;
+					const points = controls.map(point => [...point]);
+					for (let remaining = points.length - 1; remaining > 0; remaining--) {
+						for (let j = 0; j < remaining; j++) {
+							points[j][0] = points[j][0] * (1 - t) + points[j + 1][0] * t;
+							points[j][1] = points[j][1] * (1 - t) + points[j + 1][1] * t;
+						}
+					}
+					const [px, py] = points[0];
+					const overlap = otherCards.find(card => px > card.x && px < card.x + card.width && py > card.y && py < card.y + card.height);
+					if (overlap) throw new Error(`Edge #${seq} (${from} → ${to}) crosses ${overlap.id} at (${px}, ${py})`);
+				}
+				[x, y] = controls.at(-1)!;
+			}
+		}
+
+		render(frame, "Mentions", COORD.id);
+		expect(edges().map(edge => edge.seq)).toEqual(frame.messages.filter(message => message.from === COORD.id || message.to === COORD.id).map(message => message.seq));
+		expect(cards()).toEqual(networkCards);
 	});
 });

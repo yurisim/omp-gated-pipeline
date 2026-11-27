@@ -162,7 +162,7 @@ main > section[role="tabpanel"] { display: grid; gap: .85rem; }
 .header-status { grid-area: status; display: flex; justify-content: flex-end; align-items: center; gap: .65rem; }
 #run-status { display: inline-flex; align-items: center; gap: .3rem; }
 h1, h2, h3, p { margin: 0; }
-h1, h2, h3, .brand-mark, .cell-label, .member-label { font-family: var(--font-display); }
+h1, h2, h3, .brand-mark, .lane-label, .member-label { font-family: var(--font-display); }
 h1 { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; font-weight: 700; letter-spacing: -.01em; }
 h2 { font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; text-wrap: balance; color: var(--muted); }
 h3 { font-size: .75rem; font-weight: 600; }
@@ -357,24 +357,29 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .line-key { inline-size: 1.65rem; border-top: 2px solid; }
 .line-key.spawn { border-top-style: dashed; }
 .line-key.wait { border-top-style: dotted; color: var(--warn); }
-.hive-scroll {
+.line-key.peer { border: 0; block-size: 2px; color: color-mix(in oklab, var(--brand-cyan) 65%, var(--muted)); }
+.line-key.peer path { stroke: currentColor; stroke-width: 2; }
+.graph-scroll {
 	border: 1px solid color-mix(in oklab, var(--brand-cyan) 22%, var(--border));
 	border-radius: 12px;
 	background: color-mix(in oklab, var(--dusk) 85%, transparent);
 	overflow: auto;
+	min-inline-size: 0;
 	max-block-size: min(70vh, 50rem);
 }
-#hive-svg { display: block; max-inline-size: none; }
-.cell { fill: var(--surface); stroke: color-mix(in oklab, var(--brand-cyan) 32%, var(--border-strong)); stroke-width: 1.25; }
-.cell-label, .member-label { fill: var(--fg); font-weight: 650; }
-.cell-label { font-size: 12px; }
+#graph-svg { display: block; max-inline-size: none; }
+.lane { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1.25; }
+.lane-coord { fill: color-mix(in oklab, var(--brand-cyan) 10%, var(--surface)); stroke: var(--brand-cyan); }
+.lane-divider { stroke: var(--border-strong); }
+.lane-label, .member-label { fill: var(--fg); font-weight: 650; }
+.lane-label { font-size: 12px; }
 .member-label { font-size: 11px; }
 .member-desc { fill: var(--muted); font-size: 9.5px; }
-.cell-status, .member-status { color: var(--muted); fill: currentColor; font-size: 10px; }
-.cell-status[data-status="done"], .member-status:is([data-status="done"], [data-status="active"]) { color: var(--ok); }
-.cell-status[data-status="running"], .member-status[data-status="working"] { color: var(--info); }
+.lane-status, .member-status { color: var(--muted); fill: currentColor; font-size: 10px; }
+.lane-status[data-status="done"], .member-status:is([data-status="done"], [data-status="active"]) { color: var(--ok); }
+.lane-status[data-status="running"], .member-status[data-status="working"] { color: var(--info); }
 .member-status[data-status="waiting"] { color: var(--warn); }
-:is(.cell-status, .member-status)[data-status="blocked"] { color: var(--err); }
+:is(.lane-status, .member-status)[data-status="blocked"] { color: var(--err); }
 .member-node rect { fill: var(--surface-2); stroke: var(--border-strong); stroke-width: 1.25; }
 .member-node, .message-edge { cursor: pointer; }
 .member-node:focus-visible rect, .member-node[aria-pressed="true"] rect { stroke: var(--accent); stroke-width: 4; }
@@ -385,6 +390,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .edge-hit { stroke: transparent; stroke-width: 24; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .message-edge > .edge-line { pointer-events: stroke; }
 .edge-spawn .edge-line { stroke-dasharray: 8 5; }
+.edge-peer .edge-line { stroke: color-mix(in oklab, var(--brand-cyan) 65%, var(--muted)); }
 .edge-wait .edge-line { stroke: var(--warn); stroke-dasharray: 2 5; }
 .message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: var(--accent); stroke-width: 4; }
 .message-edge:focus-visible .edge-line { stroke-width: 6; }
@@ -419,9 +425,11 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	:focus-visible, .jumpable:focus { outline-color: Highlight; }
 	[role="tab"][aria-selected="true"], button[aria-pressed="true"] { border-color: Highlight; }
 	progress { appearance: auto; }
-	.cell, .member-node rect { fill: Canvas; stroke: CanvasText; }
-	.cell-label, .member-label, .member-desc, .cell-status, .member-status { fill: CanvasText; }
-	.edge-line, .edge-spawn .edge-line, .edge-wait .edge-line { stroke: CanvasText; }
+	.lane, .member-node rect { fill: Canvas; stroke: CanvasText; }
+	.lane-divider { stroke: CanvasText; }
+	.lane-label, .lane-status, .member-label, .member-desc, .member-status { fill: CanvasText; }
+	.edge-line, .edge-wait .edge-line { stroke: CanvasText; }
+	.edge-peer .edge-line, .line-key.peer path { stroke: CanvasText; stroke-dasharray: 7 3 2 3; }
 	.marker-arrow { fill: CanvasText; }
 	.member-node:focus-visible rect, .member-node[aria-pressed="true"] rect,
 	.message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: Highlight; }
@@ -521,16 +529,17 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 			<div class="row between">
 				<output id="playback-position" for="scrub" aria-live="off">No messages yet</output>
 				<div id="graph-views" class="controls" role="group" aria-label="Graph view">
-					<button type="button" data-view="Hive" aria-pressed="true">Hive</button>
+					<button type="button" data-view="Network" aria-pressed="true">Network</button>
 					<button type="button" data-view="Mentions" aria-pressed="false">Mentions</button>
 				</div>
 			</div>
 		</div>
-		<div class="hive-scroll" id="hive-scroll">
-			<svg id="hive-svg" role="group" aria-label="Swarm hive: select a member or a directed arrow for details"></svg>
+		<div class="graph-scroll" id="graph-scroll">
+			<svg id="graph-svg" role="group" aria-label="Swarm network: select a member or a directed arrow for details"></svg>
 		</div>
 		<div class="legend" role="group" aria-label="Graph legend">
 			<span><i class="line-key" aria-hidden="true"></i>Message</span>
+			<span><svg class="line-key peer" aria-hidden="true" viewBox="0 0 28 2"><path d="M0 1 H28"></path></svg>Peer message</span>
 			<span><i class="line-key spawn" aria-hidden="true"></i>Spawn</span>
 			<span><i class="line-key wait" aria-hidden="true"></i>Waiting for coordinator</span>
 		</div>
@@ -564,7 +573,7 @@ let reelCards = [];
 let tab = 'Overview';
 let boardTag = 'all';
 let connection = 'Connecting…';
-let graphView = 'Hive';
+let graphView = 'Network';
 let cursor = 0;
 let followLive = true;
 let playing = false;
@@ -1148,63 +1157,41 @@ function graphChoice(el, key, name, pressed, activate) {
 		activate();
 	});
 }
-const ROOT3 = Math.sqrt(3);
-const NODE_W = 168;
-const NODE_H = 58;
-const COLUMN_W = NODE_W + 10;
-const ROW_H = NODE_H + 10;
-function* hexSlots() {
-	yield [0, 0];
-	for (let ring = 1; ; ring++) {
-		let q = ring, r = 0;
-		for (const [dq, dr] of [[-1, 1], [-1, 0], [0, -1], [1, -1], [1, 0], [0, 1]]) {
-			for (let step = 0; step < ring; step++) {
-				yield [q, r];
-				q += dq;
-				r += dr;
-			}
-		}
-	}
-}
+const NODE_W = 180;
+const NODE_H = 60;
+const NODE_GAP_X = 36;
+const MAX_ROW_COLS = 4;
+const LANE_PAD_X = 28;
+const LANE_HEADER_H = 36;
+const LANE_PAD_TOP = 16;
+const LANE_PAD_BOTTOM = 22;
+const COORD_LANE_GAP = 64;
+const LANE_GAP_Y = 36;
+const CANVAS_PAD = 24;
+const CORRIDOR_STEP = 8;
 function clip(text, length) {
 	return text.length <= length ? text : Array.from(text).slice(0, length - 1).join('') + '…';
 }
-function wrapLines(text, maxPerLine, maxLines) {
-	const chars = Array.from(text.trim().replace(/\s+/g, ' '));
-	const lines = [];
-	let start = 0;
-	while (start < chars.length && lines.length < maxLines) {
-		const limit = start + maxPerLine;
-		if (limit >= chars.length) {
-			lines.push(chars.slice(start).join(''));
-			break;
-		}
-		if (lines.length === maxLines - 1) {
-			lines.push(clip(chars.slice(start, limit + 1).join(''), maxPerLine));
-			break;
-		}
-		const space = chars.lastIndexOf(' ', limit);
-		const end = space > start ? space : limit;
-		lines.push(chars.slice(start, end).join(''));
-		start = end + (chars[end] === ' ' ? 1 : 0);
-	}
-	return lines;
-}
-function layoutHive(frame) {
+function layoutNetwork(frame) {
 	const people = new Map(frame.members.map(member => [member.id, member]));
 	const coordinators = frame.members.filter(member => member.kind === 'main');
 	if (!coordinators.length) {
-		const id = frame.messages.find(message => message.tag === 'spawn')?.from ?? 'coordinator';
-		const coordinator = { id, name: id, role: 'Coordinator', status: 'idle' };
+		let id = frame.messages.find(message => message.tag === 'spawn')?.from;
+		if (id === undefined) {
+			id = 'coordinator';
+			while (people.has(id)) id += '-';
+		}
+		const coordinator = people.get(id) ?? { id, name: id, role: 'Coordinator', status: 'idle' };
 		coordinators.push(coordinator);
 		people.set(id, coordinator);
 	}
+	const coordinator = coordinators[0].id;
 	const center = { title: 'Coordinator', members: coordinators };
 	const workers = { title: 'Unassigned workers', members: [] };
 	const outside = { title: 'Other participants', members: [] };
 	const threads = new Map(frame.threads.map(thread => [thread.id, { title: thread.title, status: thread.status, members: [] }]));
 	for (const member of frame.members) {
-		if (member.kind !== 'main') (threads.get(member.threadId) ?? workers).members.push(member);
+		if (member.kind !== 'main' && member.id !== coordinator) (threads.get(member.threadId) ?? workers).members.push(member);
 	}
 	for (const message of frame.messages) {
 		for (const id of [message.from, message.to]) {
@@ -1214,114 +1201,206 @@ function layoutHive(frame) {
 			people.set(id, external);
 		}
 	}
-	const cells = [center, ...threads.values()];
-	if (workers.members.length) cells.push(workers);
-	if (outside.members.length) cells.push(outside);
-	let radius = 142;
-	for (const cell of cells) {
-		cell.columns = Math.max(1, Math.ceil(Math.sqrt(cell.members.length / 4)));
-		cell.rows = Math.ceil(cell.members.length / cell.columns);
-		const halfWidth = cell.columns * COLUMN_W / 2;
-		const halfHeight = cell.rows * ROW_H / 2;
-		radius = Math.max(radius, halfHeight + 98, halfHeight + 44 + halfWidth / ROOT3, halfWidth * 2 / ROOT3 + 22);
-	}
-	const slots = hexSlots();
+	const lanes = [center, ...threads.values()];
+	if (workers.members.length) lanes.push(workers);
+	if (outside.members.length) lanes.push(outside);
 	const points = new Map();
-	let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-	for (const cell of cells) {
-		const [q, r] = slots.next().value;
-		cell.x = ROOT3 * (radius + 6) * (q + r / 2);
-		cell.y = 1.5 * (radius + 6) * r;
-		xMin = Math.min(xMin, cell.x - ROOT3 * radius / 2 - 16);
-		xMax = Math.max(xMax, cell.x + ROOT3 * radius / 2 + 16);
-		yMin = Math.min(yMin, cell.y - radius - 16);
-		yMax = Math.max(yMax, cell.y + radius + 16);
-		cell.members.forEach((member, index) => {
-			const row = Math.floor(index / cell.columns);
-			const width = Math.min(cell.columns, cell.members.length - row * cell.columns);
-			const x = cell.x + (index % cell.columns - (width - 1) / 2) * COLUMN_W;
-			const y = cell.y + 23 + (row - (cell.rows - 1) / 2) * ROW_H;
-			points.set(member.id, { x, y });
-		});
+	let maxCols = 0;
+	for (const [laneIndex, lane] of lanes.entries()) {
+		const n = lane.members.length;
+		const rowCount = Math.ceil(n / MAX_ROW_COLS);
+		lane.rows = [];
+		if (!rowCount) continue;
+		const colsPerRow = Math.ceil(n / rowCount);
+		const extra = n % rowCount;
+		maxCols = Math.max(maxCols, colsPerRow);
+		let offset = 0;
+		for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+			const cols = colsPerRow - (extra !== 0 && rowIndex >= extra ? 1 : 0);
+			const row = { points: [], maxArcDepth: 0 };
+			for (let colIndex = 0; colIndex < cols; colIndex++) {
+				const point = { x: 0, y: 0, laneIndex, rowIndex, colIndex };
+				row.points.push(point);
+				points.set(lane.members[offset++].id, point);
+			}
+			lane.rows.push(row);
+		}
 	}
-	return { cells, points, people, radius, coordinator: coordinators[0].id, xMin, xMax, yMin, yMax };
+	const laneWidth = Math.max(460, maxCols * NODE_W + Math.max(0, maxCols - 1) * NODE_GAP_X + 2 * LANE_PAD_X);
+	// Use the whole frame so switching to Mentions changes neither the rows nor the visible paths.
+	const pairs = new Map();
+	const routes = new Map();
+	function addRoute(fromId, toId) {
+		const key = JSON.stringify([fromId, toId]);
+		let pair = pairs.get(key);
+		if (!pair) pairs.set(key, pair = { from: points.get(fromId), to: points.get(toId), count: 0 });
+		return { pair, pairIndex: pair.count++ };
+	}
+	for (const message of frame.messages) {
+		const route = addRoute(message.from, message.to);
+		const { pair: { from, to }, pairIndex } = route;
+		routes.set(message.seq, route);
+		if (from === to || from.laneIndex !== to.laneIndex || from.rowIndex !== to.rowIndex) continue;
+		const span = Math.abs(to.colIndex - from.colIndex);
+		const depth = Math.min(140, 28 + (span - 1) * 26 + pairIndex * 14);
+		const row = lanes[from.laneIndex].rows[from.rowIndex];
+		row.maxArcDepth = Math.max(row.maxArcDepth, depth);
+	}
+	const waitRoutes = new Map();
+	for (const member of people.values()) {
+		if (member.status === 'waiting' && member.id !== coordinator) waitRoutes.set(member.id, addRoute(member.id, coordinator));
+	}
+	let y = CANVAS_PAD;
+	let rowOrder = 0;
+	for (const [laneIndex, lane] of lanes.entries()) {
+		if (laneIndex) y += laneIndex === 1 ? COORD_LANE_GAP : LANE_GAP_Y;
+		lane.y = y;
+		y += LANE_HEADER_H + LANE_PAD_TOP;
+		for (const [rowIndex, row] of lane.rows.entries()) {
+			const rowWidth = row.points.length * NODE_W + (row.points.length - 1) * NODE_GAP_X;
+			const startX = CANVAS_PAD + (laneWidth - rowWidth) / 2 + NODE_W / 2;
+			for (const point of row.points) {
+				point.x = startX + point.colIndex * (NODE_W + NODE_GAP_X);
+				point.y = y + NODE_H / 2;
+				point.rowOrder = rowOrder;
+			}
+			rowOrder++;
+			const gutter = row.maxArcDepth ? Math.min(164, row.maxArcDepth + 24)
+				: rowIndex === lane.rows.length - 1 ? LANE_PAD_BOTTOM : 28;
+			y += NODE_H + gutter;
+		}
+		lane.height = y - lane.y;
+	}
+	// A track runs outside the lanes, clear of every intermediate card regardless of row alignment.
+	const detours = [[], []];
+	const centerX = CANVAS_PAD + laneWidth / 2;
+	for (const pair of pairs.values()) {
+		const { from, to } = pair;
+		const upper = Math.min(from.rowOrder, to.rowOrder), lower = Math.max(from.rowOrder, to.rowOrder);
+		if (lower - upper <= 1) continue;
+		const midX = (from.x + to.x) / 2;
+		const side = midX > centerX || (midX === centerX && from.rowOrder > to.rowOrder) ? 1 : 0;
+		detours[side].push({ upper, lower, pair });
+	}
+	let padding = CANVAS_PAD;
+	for (const [side, edges] of detours.entries()) {
+		const trackEnds = [];
+		edges.sort((a, b) => a.upper - b.upper);
+		for (const { upper, lower, pair } of edges) {
+			// Reuse tracks only when the previous edge ends above this one's first turn.
+			let track = trackEnds.findIndex(end => end <= upper);
+			if (track === -1) track = trackEnds.length;
+			trackEnds[track] = lower;
+			const offset = (track + 1) * CORRIDOR_STEP;
+			pair.corridorX = CANVAS_PAD + (side ? laneWidth + offset : -offset);
+			padding = Math.max(padding, offset + CORRIDOR_STEP);
+		}
+	}
+	return { lanes, points, people, coordinator, laneWidth, xMin: CANVAS_PAD - padding,
+		width: laneWidth + 2 * padding, height: y + CANVAS_PAD, routes, waitRoutes };
 }
-function edgePath(from, to, bend) {
+function corridorPath(x1, y1, x2, y2, x) {
+	const radius = 8;
+	const v = Math.sign(y2 - y1) * radius;
+	const entryY = y1 + v * 1.5, exitY = y2 - v * 1.5;
+	const entryX = Math.sign(x - x1) * radius, exitX = Math.sign(x2 - x) * radius;
+	return 'M ' + x1 + ' ' + y1 +
+		' V ' + (entryY - v) + ' Q ' + x1 + ' ' + entryY + ' ' + (x1 + entryX) + ' ' + entryY +
+		' H ' + (x - entryX) + ' Q ' + x + ' ' + entryY + ' ' + x + ' ' + (entryY + v) +
+		' V ' + (exitY - v) + ' Q ' + x + ' ' + exitY + ' ' + (x + exitX) + ' ' + exitY +
+		' H ' + (x2 - exitX) + ' Q ' + x2 + ' ' + exitY + ' ' + x2 + ' ' + (exitY + v) + ' V ' + y2;
+}
+function edgePath(from, to, bend, pairIndex, pairCount, corridorX) {
 	if (from === to) {
 		const side = from.x + NODE_W / 2;
-		return 'M ' + side + ' ' + (from.y - 12) + ' C ' + (side + bend + 16) + ' ' + (from.y - 48) + ' ' +
-			(side + bend + 16) + ' ' + (from.y + 48) + ' ' + side + ' ' + (from.y + 12);
+		const reach = side + Math.min(NODE_GAP_X, bend + 16);
+		return 'M ' + side + ' ' + (from.y - 12) + ' C ' + reach + ' ' + (from.y - 48) + ' ' +
+			reach + ' ' + (from.y + 48) + ' ' + side + ' ' + (from.y + 12);
 	}
-	const dx = to.x - from.x, dy = to.y - from.y;
-	const distance = Math.hypot(dx, dy);
-	const control = { x: (from.x + to.x) / 2 - bend * dy / distance, y: (from.y + to.y) / 2 + bend * dx / distance };
-	function boundary(point) {
-		const x = control.x - point.x, y = control.y - point.y;
-		const scale = 1 / Math.max(Math.abs(x) / (NODE_W / 2 + 2), Math.abs(y) / (NODE_H / 2 + 2));
-		return (point.x + x * scale) + ' ' + (point.y + y * scale);
+	if (from.laneIndex === to.laneIndex && from.rowIndex === to.rowIndex) {
+		const reverse = from.x > to.x;
+		const offset = Math.min(32, 10 + pairIndex * 6) * (reverse ? -1 : 1);
+		const bottom = from.y + NODE_H / 2;
+		const span = Math.abs(to.colIndex - from.colIndex);
+		const depth = Math.min(140, 28 + (span - 1) * 26 + pairIndex * 14 + (reverse ? 8 : 0));
+		return 'M ' + (from.x + offset) + ' ' + (bottom + 2) + ' Q ' +
+			((from.x + to.x) / 2) + ' ' + (bottom + depth) + ' ' + (to.x - offset) + ' ' + (bottom + 2);
 	}
-	return 'M ' + boundary(from) + ' Q ' + control.x + ' ' + control.y + ' ' + boundary(to);
+	const limit = NODE_W / 2 - 16;
+	const centeredIndex = pairIndex - (pairCount - 1) / 2;
+	const spread = Math.max(-limit, Math.min(limit, centeredIndex * 8));
+	const port = (NODE_H / 2 + 2) * (from.y < to.y ? 1 : -1);
+	const x1 = from.x + spread, x2 = to.x + spread;
+	const y1 = from.y + port, y2 = to.y - port;
+	if (corridorX !== undefined) {
+		const trackSpread = centeredIndex * (CORRIDOR_STEP - 2) / Math.max(1, pairCount - 1);
+		return corridorPath(x1, y1, x2, y2, corridorX + trackSpread);
+	}
+	const dx = x2 - x1, dy = y2 - y1;
+	// Reversing the endpoints reverses the perpendicular. Keep its control point vertically between the ports.
+	const offset = Math.sign(bend) * Math.min(Math.abs(bend), Math.abs(dy) / 2) / Math.hypot(dx, dy);
+	const cx = (x1 + x2) / 2 - offset * dy, cy = (y1 + y2) / 2 + offset * dx;
+	return 'M ' + x1 + ' ' + y1 + ' Q ' + cx + ' ' + cy + ' ' + x2 + ' ' + y2;
 }
 const messageLabel = message => '#' + message.seq + ' · ' + label(message.tag) + ' · ' + mention(message.from) + ' → ' + mention(message.to);
 function selectGraph(kind, id) {
 	selection = { kind, id };
 	renderGraph();
 }
-function drawHive(frame, layout, messages) {
-	const { cells, points, people, radius, coordinator, xMin, xMax, yMin, yMax } = layout;
-	const root = byId('hive-svg');
+function drawNetwork(frame, layout, messages) {
+	const { lanes, points, people, coordinator, laneWidth, xMin, width, height, routes, waitRoutes } = layout;
+	const root = byId('graph-svg');
 	const oldKey = root.contains(document.activeElement) ? document.activeElement.dataset.key : undefined;
-	const width = xMax - xMin, height = yMax - yMin;
-	const scale = Math.max(.78, Math.min(1.25, (byId('hive-scroll').clientWidth || width) / width));
-	root.setAttribute('viewBox', [xMin, yMin, width, height].join(' '));
+	const scroller = byId('graph-scroll');
+	const scale = Math.max(.78, Math.min(1.25, (scroller.clientWidth || width) / width));
+	root.setAttribute('viewBox', [xMin, 0, width, height].join(' '));
 	root.setAttribute('width', Math.ceil(width * scale));
 	root.setAttribute('height', Math.ceil(height * scale));
-	const marker = svg('marker', { id: 'arrow', viewBox: '0 0 10 10', refX: 10, refY: 5, markerWidth: 6, markerHeight: 6, orient: 'auto' });
-	marker.append(svg('path', { class: 'marker-arrow', d: 'M0 0 L10 5 L0 10 Z', fill: 'var(--muted)' }));
 	const defs = svg('defs', {});
-	defs.append(marker);
+	for (const [id, fill] of [['arrow', 'var(--muted)'], ['arrow-peer', 'color-mix(in oklab, var(--brand-cyan) 65%, var(--muted))']]) {
+		const marker = svg('marker', { id, viewBox: '0 0 10 10', refX: 10, refY: 5,
+			markerWidth: 10, markerHeight: 10, markerUnits: 'userSpaceOnUse', orient: 'auto' });
+		marker.append(svg('path', { class: 'marker-arrow', d: 'M0 0 L10 5 L0 10 Z', fill }));
+		defs.append(marker);
+	}
 	const regions = svg('g', {});
 	// Put padded hit areas behind all visible strokes so a neighboring edge cannot mask a line.
 	const edgeTargets = svg('g', { 'aria-hidden': 'true' });
 	const arrows = svg('g', {});
 	const nodes = svg('g', {});
 	let focusTarget;
-	for (const cell of cells) {
-		const vertices = Array.from({ length: 6 }, (_, i) => {
-			const angle = (i * 60 - 90) * Math.PI / 180;
-			return (cell.x + radius * Math.cos(angle)) + ',' + (cell.y + radius * Math.sin(angle));
-		});
-		const region = svg('g', { 'aria-label': cell.title });
-		const titleWidth = 24;
-		const suffixMatch = / \(\d+\)$/.exec(cell.title);
-		const suffix = suffixMatch?.index && suffixMatch[0].length < titleWidth ? suffixMatch[0] : '';
-		const titleLines = wrapLines(suffix ? cell.title.slice(0, -suffix.length) : cell.title, titleWidth, 2);
-		if (suffix && titleLines.length) {
-			const last = titleLines.length - 1;
-			titleLines[last] = clip(titleLines[last], titleWidth - suffix.length) + suffix;
-		}
-		const title = svg('text', { x: cell.x, y: cell.y - radius + (titleLines.length > 1 ? 54 : 64),
-			class: 'cell-label', 'text-anchor': 'middle' });
-		for (const [index, line] of titleLines.entries()) {
-			title.append(svg('tspan', index ? { x: cell.x, dy: 14 } : {}, line));
-		}
-		region.append(svg('title', {}, cell.title), svg('polygon', { class: 'cell', points: vertices.join(' ') }), title);
-		if (cell.status) region.append(svg('text', { x: cell.x, y: cell.y - radius + 84, class: 'cell-status',
-			'text-anchor': 'middle', 'data-status': cell.status }, statusGlyph(cell.status) + ' ' + label(cell.status)));
+	const left = CANVAS_PAD + LANE_PAD_X;
+	const right = CANVAS_PAD + laneWidth - LANE_PAD_X;
+	for (const [index, lane] of lanes.entries()) {
+		const id = 'lane-label-clip-' + index;
+		const crop = svg('clipPath', { id });
+		crop.append(svg('rect', { x: left, y: lane.y, width: right - left - (lane.status ? 96 : 0), height: LANE_HEADER_H }));
+		defs.append(crop);
+		const dividerY = lane.y + LANE_HEADER_H;
+		const textY = lane.y + LANE_HEADER_H / 2 + 4;
+		const region = svg('g', { role: 'group', 'aria-label': lane.title });
+		region.append(
+			svg('title', {}, lane.title),
+			svg('rect', { class: index ? 'lane' : 'lane lane-coord', x: CANVAS_PAD, y: lane.y, width: laneWidth, height: lane.height, rx: 12 }),
+			svg('line', { class: 'lane-divider', x1: left, x2: right, y1: dividerY, y2: dividerY }),
+			svg('text', { class: 'lane-label', x: left, y: textY, 'clip-path': 'url(#' + id + ')' }, lane.title));
+		if (lane.status) region.append(svg('text', { class: 'lane-status', x: right, y: textY,
+			'text-anchor': 'end', 'data-status': lane.status }, statusGlyph(lane.status) + ' ' + label(lane.status)));
 		regions.append(region);
 	}
-	const parallels = new Map();
 	for (const message of messages) {
-		const pair = JSON.stringify([message.from, message.to]);
-		const index = parallels.get(pair) ?? 0;
-		parallels.set(pair, index + 1);
-		const path = edgePath(points.get(message.from), points.get(message.to), 15 + 75 * index / (index + 4));
-		const edge = svg('g', { class: 'message-edge' + (message.tag === 'spawn' ? ' edge-spawn' : '') });
-		edge.append(svg('path', { class: 'edge-line', d: path, 'marker-end': 'url(#arrow)' }),
-			svg('title', {}, messageLabel(message)));
+		const { pair: { from, to, count, corridorX }, pairIndex } = routes.get(message.seq);
+		const bend = 15 + 75 * pairIndex / (pairIndex + 4);
+		const path = edgePath(from, to, bend, pairIndex, count, corridorX);
+		const peer = message.from !== coordinator && message.to !== coordinator && message.from !== message.to && message.tag !== 'spawn';
+		const edgeClass = message.tag === 'spawn' ? ' edge-spawn' : peer ? ' edge-peer' : '';
+		const edge = svg('g', { class: 'message-edge' + edgeClass });
+		const name = messageLabel(message);
+		edge.append(svg('path', { class: 'edge-line', d: path, 'marker-end': peer ? 'url(#arrow-peer)' : 'url(#arrow)' }),
+			svg('title', {}, name));
 		const key = 'message:' + message.seq;
 		const pressed = selection ? selection.kind === 'message' && selection.id === message.seq : message.seq === frame.messages.at(-1)?.seq;
-		graphChoice(edge, key, messageLabel(message), pressed, () => selectGraph('message', message.seq));
+		graphChoice(edge, key, name, pressed, () => selectGraph('message', message.seq));
 		const target = svg('path', { class: 'edge-hit', d: path });
 		target.addEventListener('pointerenter', () => edge.classList.add('pointer-hover'));
 		target.addEventListener('pointerleave', () => edge.classList.remove('pointer-hover'));
@@ -1333,11 +1412,11 @@ function drawHive(frame, layout, messages) {
 		if (oldKey === key) focusTarget = edge;
 		arrows.append(edge);
 	}
-	for (const member of people.values()) {
-		if (member.status !== 'waiting' || member.id === coordinator) continue;
+	for (const [memberId, { pair: { from, to, count, corridorX }, pairIndex }] of waitRoutes) {
+		const member = people.get(memberId);
 		const wait = svg('g', { class: 'edge-wait' });
 		wait.append(svg('title', {}, mention(member.name) + ' is waiting for the coordinator'),
-			svg('path', { class: 'edge-line', d: edgePath(points.get(member.id), points.get(coordinator), -25), 'marker-end': 'url(#arrow)' }));
+			svg('path', { class: 'edge-line', d: edgePath(from, to, -25, pairIndex, count, corridorX), 'marker-end': 'url(#arrow)' }));
 		arrows.append(wait);
 	}
 	for (const member of people.values()) {
@@ -1349,8 +1428,8 @@ function drawHive(frame, layout, messages) {
 		const description = member.description !== member.name ? member.description : '';
 		group.append(svg('title', {}, member.description ? title + ' · ' + member.description : title),
 			svg('rect', { x: x - NODE_W / 2, y: y - NODE_H / 2, width: NODE_W, height: NODE_H, rx: 8 }),
-			svg('text', { x, y: y - (description ? 11 : 3), class: 'member-label', 'text-anchor': 'middle' }, clip(name, 22)));
-		if (description) group.append(svg('text', { x, y: y + 4, class: 'member-desc', 'text-anchor': 'middle' }, clip(description, 24)));
+			svg('text', { x, y: y - (description ? 11 : 3), class: 'member-label', 'text-anchor': 'middle' }, clip(name, 24)));
+		if (description) group.append(svg('text', { x, y: y + 4, class: 'member-desc', 'text-anchor': 'middle' }, clip(description, 28)));
 		group.append(svg('text', { x, y: y + (description ? 19 : 15), class: 'member-status',
 			'data-status': member.status, 'text-anchor': 'middle' }, statusGlyph(member.status) + ' ' + status));
 		const key = 'member:' + member.id;
@@ -1361,9 +1440,8 @@ function drawHive(frame, layout, messages) {
 	root.replaceChildren(defs, regions, edgeTargets, arrows, nodes);
 	focusTarget?.focus({ preventScroll: true });
 	if (!centered && !byId('panel-Graph').hidden) {
-		const scroller = byId('hive-scroll');
-		scroller.scrollLeft = -xMin * scale - scroller.clientWidth / 2;
-		scroller.scrollTop = -yMin * scale - scroller.clientHeight / 2;
+		scroller.scrollLeft = Math.max(0, (width * scale - scroller.clientWidth) / 2);
+		scroller.scrollTop = 0;
 		centered = true;
 	}
 }
@@ -1371,10 +1449,10 @@ function renderGraph() {
 	const count = snapshot?.messages.length ?? 0;
 	renderPlayback(count);
 	const frame = snapshot ? (followLive ? snapshot : replayFrame()) : { members: [], threads: [], messages: [] };
-	const layout = layoutHive(frame);
+	const layout = layoutNetwork(frame);
 	const member = selection?.kind === 'member' ? layout.people.get(selection.id) : undefined;
 	const messages = graphView === 'Mentions' && member ? frame.messages.filter(message => message.from === member.id || message.to === member.id) : frame.messages;
-	drawHive(frame, layout, messages);
+	drawNetwork(frame, layout, messages);
 	const message = selection?.kind === 'message' ? frame.messages.find(entry => entry.seq === selection.id) : frame.messages.at(-1);
 	byId('graph-detail').replaceChildren(member ? memberCard(member, 'graph') : message ? messageCard(message, false) : muted('Select a member or message.'));
 	byId('mentions').hidden = graphView !== 'Mentions';
