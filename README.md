@@ -5,6 +5,7 @@ omp plugin package: plan → deterministic preflight (0 model tokens) → task-m
 - `rules/gated-pipeline.md`: always-apply main-session rule: when to plan, fan out, and review.
 - `skills/plan-preflight/`: `preflight.py` checks plan paths/symbols (`[NEW]` exempt) and unlisted callers of changed signatures.
 - `skills/parallel-fanout/`, `skills/adversarial-review/`: pipeline procedure.
+- `skills/color-audit/`: color-meaning audit (one role per color, text or icon on every colored element, per-screen key).
 - `agents/synth.md` (task model; `SPEC_CONFLICT` gate), `agents/adversarial-reviewer.md` and `agents/adversarial-reviewer-alt.md`, both loading `skills/adversarial-review/reviewer.md`.
 
 ## Goals
@@ -51,7 +52,7 @@ The repository root includes `plugin.json`, so Antigravity can load the same `sk
          ]
        }
 
-   Note: `agy plugin validate .` loads `skills: 3`, `rules: 1` and `hooks: 1` while skipping OMP's `agents/*.md` files (which Antigravity registers at runtime via `define_subagent`). `hooks.json` runs `tools/antigravity_preflight_hook.py`, which denies a `write_file` of a plan (`implementation_plan.md` or `*-plan.md` with `## Parallel waves`) when plan-preflight fails.
+   Note: `agy plugin validate .` loads `skills: 4`, `rules: 1` and `hooks: 1` while skipping OMP's `agents/*.md` files (which Antigravity registers at runtime via `define_subagent`). `hooks.json` runs `tools/antigravity_preflight_hook.py`, which denies a `write_file` of a plan (`implementation_plan.md` or `*-plan.md` with `## Parallel waves`) when plan-preflight fails.
 
 2. **Skills only (no always-on rule):** register the `skills/` directory in `~/.gemini/config/skills.json`:
 
@@ -61,7 +62,7 @@ The repository root includes `plugin.json`, so Antigravity can load the same `sk
          ]
        }
 
-3. Delete any manually copied `plan-preflight`, `parallel-fanout`, or `adversarial-review` directories under `~/.gemini/config/skills/` so they do not shadow the plugin.
+3. Delete any manually copied `plan-preflight`, `parallel-fanout`, `adversarial-review`, or `color-audit` directories under `~/.gemini/config/skills/` so they do not shadow the plugin.
 
 Antigravity does not run OMP's `agent-end` advisor hook or `modelRoles`; each skill's `antigravity.md` maps implementation waves and cross-family adversarial reviews to `swarm` workers (with `define_subagent`/`invoke_subagent` as fallback), messaging (`post_message` / `send_message`), user prompts (`ask_question`), and model pinning for cross-family review.
 
@@ -89,6 +90,24 @@ The package names no model, only omp model roles (`modelRoles` in `~/.omp/agent/
 | `modelRoles.advisor` | main-session advisor | task model |
 
 Set `default`, `plan` and `slow` to one model, `task` and `advisor` to another, and keep the two groups different: each model reviews what the other wrote.
+
+### Using with EGM
+
+EGM's reviewer agents (`egm-design`, `egm-zoom-out`, ...) set no `model:`, so omp runs them on the model of the session that spawns them (`task.agentModelOverrides` → agent `model:` → parent model). A coordinator-model session therefore reviews its own designs with its own model. To make EGM reviews cross-family, map each reviewer to the task role in `~/.omp/agent/config.yml`:
+
+    task:
+      agentModelOverrides:
+        egm-design: "@task"
+        egm-codebase-details: "@task"
+        egm-zoom-out: "@task"
+        egm-comprehension: "@task"
+        egm-implementation-readiness: "@task"
+        egm-structural: "@task"
+        egm-inventive-catalyst: "@task"
+        egm-style: "@task"
+        egm-synthesizer: "@task"
+
+Cost: EGM reviews then share the task model's quota with `synth`. `egm-bootstrap-orchestrator` writes docs, not reviews, so it is left on the parent model.
 
 ## Project contract
 

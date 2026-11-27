@@ -8,8 +8,8 @@ Use [SKILL.md](./SKILL.md) for all planning, slicing, barrier, ownership, and ga
 | --- | --- |
 | `local://<file>` | `<scratch>/<file>` (or `<artifact-dir>/<plan>.md` for plans) |
 | `skill://<name>` | Skill `<name>` (read both `SKILL.md` and `antigravity.md`) |
-| `task` batch (`tasks[]`) | Preferred for implementation waves (2+ slices): parallel `swarm{action: "add"}` workers (read `swarm_pane` before adding the first workers, embed `../../agents/synth.md` in each brief, and end the turn without polling). Fallback (or for single-slice / read-only `scout` batches): parallel `invoke_subagent` calls |
-| `write agent://<id>` | For swarm workers: `post_message` mentioning `@<worker-name>` (never `kill` and re-`add` for owner edits). For subagents: `send_message` (`Recipient: <conversationId>`) |
+| `task` batch (`tasks[]`) | Parallel `swarm` workers for implementation waves; parallel `invoke_subagent` calls for fallback, single slices, or read-only `scout` batches |
+| `write agent://<id>` | For swarm workers: `post_message` mentioning `@<worker-name>`; for subagents: `send_message` (`Recipient: <conversationId>`) |
 | `ask` | `ask_question` |
 | `scout` (planning research) | Built-in `research` subagent via parallel `invoke_subagent` calls |
 | `BASE=$(git stash create)` | On Windows PowerShell: `$BASE = git stash create; if (-not $BASE) { $BASE = git rev-parse HEAD }` |
@@ -18,23 +18,23 @@ Use [SKILL.md](./SKILL.md) for all planning, slicing, barrier, ownership, and ga
 
 ## Swarm execution (preferred for multi-slice implementation waves)
 
-For any implementation wave with 2+ slices (or whenever model pinning / Swarm UI visibility is helpful), prefer `swarm` over `invoke_subagent`:
-1. Load the `swarm_pane` skill and call `swarm{action: "title", title: ...}` before adding the first workers.
-2. Call `swarm{action: "models", all: true}` if you need to pick a specific healthy model line; otherwise omit `model` to inherit your own model or pin a faster worker model consistently across the wave.
-3. Spawn one worker per slice in parallel via `swarm{action: "add", name: "<slice-id-lowercase>", workspace: ...}`, embedding the body of `../../agents/synth.md` (Turn 1 `SPEC_CONFLICT` gate, `owns`/test-protection rules, JSON output keys `edits`, `lines`, `planDeviations`, `checks`, `specConflict`) alongside the slice JSON, `BASE`, `AGENTS.md` pointer, and acceptance/barrier rules.
-4. Keep `OWNERS` mapped to each worker's roster name for owner-edit follow-ups via `@<worker>` board posts, and call `swarm{action: "kill"}` on finished workers only after the final integration and adversarial-review gates pass (so owner edits never hit a killed worker).
+Prefer `swarm` for 2+ implementation slices or when model pinning or Swarm UI visibility helps.
+1. Load `swarm_pane` and set `swarm{action: "title", title: ...}` before adding workers.
+2. Spawn one worker per slice in parallel via `swarm{action: "add", name: "<slice-id-lowercase>", workspace: ...}` with the corresponding brief below; end the turn without polling.
+3. Keep `OWNERS` mapped to worker roster names for owner edits. Use `swarm{action: "kill"}` on finished workers only after the final integration and adversarial-review gates pass.
 
-## Defining `synth` (subagent fallback)
+## Worker briefs and subagent fallback
 
-When using `invoke_subagent` instead of `swarm`, Antigravity does not auto-load `agents/*.md` from plugins. Before spawning Wave 1, read `../../agents/synth.md` (relative to this directory), strip its YAML frontmatter, and call `define_subagent` with:
+For `synth`, use the body of `../../agents/synth.md` (omit YAML frontmatter), preserving Turn 1 `SPEC_CONFLICT`, `owns`, and test protection. Instruct workers to return a JSON object with keys `edits`, `lines`, `planDeviations`, `checks`, and `specConflict`. Pass slice JSON, `BASE`, the `AGENTS.md` pointer, and acceptance/barrier rules.
+
+Embed the body in swarm briefs. For `invoke_subagent`, which does not auto-load plugin agents, call `define_subagent` before Wave 1:
 - `Name`: `"synth"`
 - `EnableWriteTools`: `true`
-- `SystemPrompt`: the body of `../../agents/synth.md`, plus these Antigravity notes:
+- `SystemPrompt`: the `synth` body, plus:
   - Read `AGENTS.md` / `GEMINI.md` if present.
-  - Return your final response as a JSON object with keys `edits`, `lines`, `planDeviations`, `checks`, and `specConflict` (matching the schema in `agents/synth.md`'s frontmatter).
   - Treat `send_message` messages from the coordinator as coordinator messages under Rule 7.
 
-For `sonic` slices (non-code edits with exact text), apply them inline as coordinator-owned edits, or use a minimal write-enabled subagent with `Model: "flash"`. Never use `TypeName: "self"`: it re-runs the full coordinator configuration and always-on rules.
+For `sonic`, use a minimal write-enabled brief with the exact text edits, not the `synth` body. Use `Model: "flash"` for a `sonic` subagent. Never use `TypeName: "self"`: it reloads the coordinator's configuration and rules.
 
 ## Workspace isolation
 
@@ -42,8 +42,8 @@ For parallel `synth` waves that run builds or tests, pass `workspace: "share"` (
 
 ## Model separation
 
-- When `exit_plan_mode` has already handed a 1-slice or serial plan to the execution model, execute it inline instead of spawning workers. Use fan-out for 2+ slices or when wave-0/barrier gates apply.
-- With `swarm`, `swarm{action: "add", model: ...}` pins workers to exact model names (enabling true cross-family separation between implementation workers and the adversarial reviewer).
+- After `exit_plan_mode`, execute inline only for a JSON-free or otherwise exempt single-slice handoff; run other slices through the prescribed gates.
+- With `swarm`, omit `model` to inherit, or pin a consistent worker model by exact name (see catalog lookup below) for cross-family review.
 - With `invoke_subagent`, generic tiers (`"inherit"`, `"flash_lite"`, `"flash"`, `"pro"`) apply; use `Model: "flash"` for `synth` slices when the coordinator runs on a larger tier, or `"inherit"` otherwise.
 
 ## Swarm reliability
@@ -56,8 +56,8 @@ Whenever running `swarm` workers:
 
 ## Quota / 429 fallback
 
-When any worker or subagent hits `RESOURCE_EXHAUSTED` (429):
-1. Immediately call `swarm{action: "models", all: true}` to inspect per-model `quotas` (`quota_remaining`, `quota_resets`).
+Call `swarm{action: "models", all: true}` when selecting a model or immediately after `RESOURCE_EXHAUSTED` (429). For quota recovery:
+1. Inspect per-model `quotas` (`quota_remaining`, `quota_resets`).
 2. If every model reports `0%` `quota_remaining`, stop and call `ask_question` with the earliest `quota_resets` timestamp; never fall back to inline coordinator edits on `synth`-owned files.
-3. Otherwise, select a healthy non-zero-quota model (preferring a single consistent model line across workers): for an existing `waiting` swarm worker, switch it via `swarm{action: "model", name: <worker>, model: <chosen>}`; for a failed subagent, spawn a replacement swarm worker via `swarm{action: "add", model: <chosen>, workspace: ...}` embedding `../../agents/synth.md` and the slice brief.
-4. Update `OWNERS` if a new worker was spawned, record the fallback in `planDeviations`, and kill all workers via `swarm{action: "kill"}` once the final integration/audit gate passes.
+3. Otherwise, choose a healthy non-zero-quota model, preferably on one consistent worker line. Switch a `waiting` swarm worker via `swarm{action: "model", name: <worker>, model: <chosen>}`; replace a failed subagent with a swarm worker using the corresponding brief above.
+4. Update `OWNERS` for replacements and record the fallback in `planDeviations`.

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-changed=$(git diff --cached --name-only --diff-filter=ACDMR -- skills agents rules) || exit 1
+changed=$(git diff --cached --name-only --diff-filter=ACDMR -- skills agents rules extensions) || exit 1
 [ -n "$changed" ] || exit 0
 
 read_version() {
@@ -26,6 +26,14 @@ if ! git diff --quiet -- package.json; then
     printf '%s\n' 'pre-commit: package.json has unstaged changes; stage or stash them so the version bump can be committed' >&2
     exit 1
 fi
+has_plugin=
+if git ls-files --error-unmatch -- plugin.json >/dev/null 2>&1; then
+    has_plugin=yes
+    if ! git diff --quiet -- plugin.json; then
+        printf '%s\n' 'pre-commit: plugin.json has unstaged changes; stage or stash them so the version bump can be committed' >&2
+        exit 1
+    fi
+fi
 
 patch=${staged_version##*.}
 # Shell arithmetic treats leading zeroes as octal, so normalize the patch first.
@@ -35,30 +43,41 @@ done
 patch=${patch:-0}
 new_version="${staged_version%.*}.$((patch + 1))"
 
-# Buffer the rewrite before opening the file for output. A sentinel preserves
-# trailing newlines; read/printf preserve CRLF and an unterminated final line.
-updated=$(
-    rewritten=
-    while :; do
-        line=
-        terminated=yes
-        IFS= read -r line || terminated=
-        if [ -z "$rewritten" ]; then
-            version=$(printf '%s\n' "$line" | read_version) || exit 1
-            if [ -n "$version" ]; then
-                prefix=${line%%"$version"*}
-                suffix=${line#*"$version"}
-                line=$prefix$new_version$suffix
-                rewritten=yes
+rewrite_version_file() (
+    file=$1
+    new_version=$2
+
+    # Buffer the rewrite before opening the file for output. A sentinel preserves
+    # trailing newlines; read/printf preserve CRLF and an unterminated final line.
+    updated=$(
+        rewritten=
+        while :; do
+            line=
+            terminated=yes
+            IFS= read -r line || terminated=
+            if [ -z "$rewritten" ]; then
+                version=$(printf '%s\n' "$line" | read_version) || exit 1
+                if [ -n "$version" ]; then
+                    prefix=${line%%"$version"*}
+                    suffix=${line#*"$version"}
+                    line=$prefix$new_version$suffix
+                    rewritten=yes
+                fi
             fi
-        fi
-        printf '%s' "$line" || exit 1
-        [ -n "$terminated" ] || break
-        printf '\n' || exit 1
-    done <package.json || exit 1
-    printf '.'
-) || exit 1
-printf '%s' "${updated%.}" >package.json || exit 1
+            printf '%s' "$line" || exit 1
+            [ -n "$terminated" ] || break
+            printf '\n' || exit 1
+        done <"$file" || exit 1
+        printf '.'
+    ) || exit 1
+    printf '%s' "${updated%.}" >"$file"
+)
+
+rewrite_version_file package.json "$new_version" || exit 1
 git add package.json || exit 1
+if [ -n "$has_plugin" ]; then
+    rewrite_version_file plugin.json "$new_version" || exit 1
+    git add plugin.json || exit 1
+fi
 printf 'pre-commit: version %s -> %s\n' "$staged_version" "$new_version" >&2
 exit 0

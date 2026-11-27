@@ -35,7 +35,7 @@ Read the project's `AGENTS.md` first (you do not inherit it). Its rules and its 
 | OUTPUT changes | Review | Exclude |
 | --- | --- | --- |
 | Content or data (docs, question banks, datasets, translations, figures) or plans that author them | source support for every claim and citation; recomputed numbers; wrong answers and alternatives that are also defensible; items that depend on unstated context; duplication of existing content; the repo's format spec for that artifact; compatibility with the repo's validation scripts; figure geometry vs stated data; merge/authoring procedures that could corrupt the file | UI components, layout, styling, accessibility, browser/e2e coverage, production hardening, security, demands for new tests |
-| UI templates, styles, components | rendered behavior and states the change touches; regressions in the components it edits | unrelated components; security unless a trust boundary changes |
+| UI templates, styles, components | rendered behavior and states the change touches; regressions in the components it edits; for each color the change adds or alters: one role per token, visible text or icon stating its meaning | unrelated components; security unless a trust boundary changes |
 | Application logic, scripts, build config | Saboteur and New Hire; Security Auditor only on its trigger | unrelated modules |
 | Agent, skill, or instruction markdown | contradictions with other instruction files; dangling references to renamed or deleted agents, skills, or paths; instructions the target agent cannot follow with its tools | runtime code |
 

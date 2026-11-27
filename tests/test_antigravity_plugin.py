@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("plan-preflight", "parallel-fanout", "adversarial-review")
+SKILLS = ("plan-preflight", "parallel-fanout", "adversarial-review", "color-audit")
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 MD_LINK_RE = re.compile(r"\[[^\]]+\]\((\.\.?/[^)]+)\)")
 

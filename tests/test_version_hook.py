@@ -61,6 +61,24 @@ class VersionHookTest(unittest.TestCase):
         self.assertEqual(self.committed_pkg(), PKG.replace("1.2.9", "1.2.10"))
         self.assertEqual(self.git("status", "--porcelain").stdout, "")
 
+    def test_plugin_json_bumped_in_sync(self):
+        plugin = PKG.rstrip("\n").replace("\n", "\r\n")
+        self.write("plugin.json", plugin)
+        self.git("add", "plugin.json")
+        self.git("commit", "-q", "--no-verify", "-m", "add plugin")
+        self.write("skills/a/SKILL.md", "b\n")
+        self.git("add", "skills")
+        self.git("commit", "-q", "-m", "skill")
+        self.assertEqual(self.committed_pkg(), PKG.replace("1.2.9", "1.2.10"))
+        self.assertEqual(self.blob("HEAD:plugin.json"), plugin.replace("1.2.9", "1.2.10"))
+
+    def test_extension_change_bumps_patch(self):
+        rel = "extensions/demo/index.ts"
+        self.write(rel, "export {};\n")
+        self.git("add", rel)
+        self.git("commit", "-q", "-m", "extension")
+        self.assertEqual(self.committed_pkg(), PKG.replace("1.2.9", "1.2.10"))
+
     def test_agents_and_rules_changes_bump(self):
         for rel, version in (("agents/x.md", "1.2.10"), ("rules/y.md", "1.2.11")):
             self.write(rel, "x\n")
@@ -107,6 +125,39 @@ class VersionHookTest(unittest.TestCase):
         self.assertIn("package.json has unstaged changes", result.stderr)
         self.assertEqual(self.commit_count(), 1)
         self.assertEqual((self.repo / "package.json").read_bytes(), dirty.encode())
+        self.assertEqual(self.git("diff", "--cached", "--raw").stdout, staged)
+
+    def test_unstaged_plugin_json_aborts_before_rewriting_package(self):
+        self.write("plugin.json", PKG)
+        self.git("add", "plugin.json")
+        self.git("commit", "-q", "--no-verify", "-m", "add plugin")
+        self.write("skills/a/SKILL.md", "b\n")
+        self.git("add", "skills")
+        dirty = PKG.replace("demo", "dirty")
+        self.write("plugin.json", dirty)
+        staged = self.git("diff", "--cached", "--raw").stdout
+        result = self.git("commit", "-q", "-m", "skill", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("plugin.json has unstaged changes", result.stderr)
+        self.assertEqual(self.commit_count(), 2)
+        self.assertEqual((self.repo / "package.json").read_bytes(), PKG.encode())
+        self.assertEqual((self.repo / "plugin.json").read_bytes(), dirty.encode())
+        self.assertEqual(self.git("diff", "--cached", "--raw").stdout, staged)
+
+    def test_unstaged_plugin_json_deletion_aborts_before_rewriting_package(self):
+        self.write("plugin.json", PKG)
+        self.git("add", "plugin.json")
+        self.git("commit", "-q", "--no-verify", "-m", "add plugin")
+        (self.repo / "plugin.json").unlink()
+        self.write("skills/a/SKILL.md", "b\n")
+        self.git("add", "skills")
+        staged = self.git("diff", "--cached", "--raw").stdout
+        result = self.git("commit", "-q", "-m", "skill", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("plugin.json has unstaged changes", result.stderr)
+        self.assertEqual(self.commit_count(), 2)
+        self.assertEqual((self.repo / "package.json").read_bytes(), PKG.encode())
+        self.assertFalse((self.repo / "plugin.json").exists())
         self.assertEqual(self.git("diff", "--cached", "--raw").stdout, staged)
 
 
