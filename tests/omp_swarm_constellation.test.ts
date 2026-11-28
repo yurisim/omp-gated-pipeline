@@ -324,4 +324,78 @@ describe("Swarm constellation UI", () => {
 			expect(list!.classList.contains("member-grid")).toBe(true);
 		}
 	});
+
+	test("routes coordinator spawn arrows through the member's wave star while other arrows stay direct", async () => {
+		const { renderSwarmHtml } = await import("../extensions/omp-swarm/ui.ts");
+		const { SwarmStore } = await import(STATE);
+		const store = new SwarmStore();
+		store.registerMember(COORD);
+		store.recordTaskBatch("Wave 1", [{ name: "S1", agent: "synth" }, { name: "S2", agent: "synth" }]);
+		store.recordTaskBatch("Wave 2", [{ name: "S3", agent: "synth" }]);
+		store.recordAgentMessage(COORD.id, "S1", "Regular note");
+		store.recordAgentMessage("S1", "S2", "Sub spawn", "spawn");
+		const frame = store.getSnapshot();
+
+		const { document, api } = makeHarness(renderSwarmHtml());
+		api.render(frame, { view: "Network", followLive: true, cursor: frame.messages.length, selection: undefined });
+		const all = walk(document.getElementById("graph-svg"));
+		const center = (group: FakeElement, cls: string) => {
+			const c = walk(group).find(el => el.tag === "circle" && el.classList.contains(cls))!;
+			return { x: Number(c.getAttribute("cx")), y: Number(c.getAttribute("cy")) };
+		};
+		const waveOf = (memberId: string) => {
+			const threadId = frame.members.find(m => m.id === memberId)!.threadId;
+			return center(all.find(el => el.dataset.key === "lane:thread:" + threadId)!, "lane-star");
+		};
+		const star = (id: string) => center(all.find(el => el.dataset.key === "member:" + id)!, "member-star");
+		const ends = (d: string) => {
+			const n = d.match(/-?[\d.]+(?:e[+-]?\d+)?/g)!.map(Number);
+			return { start: { x: n[0], y: n[1] }, end: { x: n[n.length - 2], y: n[n.length - 1] } };
+		};
+		const near = (p: { x: number; y: number }, q: { x: number; y: number }, max: number) => Math.hypot(p.x - q.x, p.y - q.y) <= max;
+		const lines = (seq: number) => walk(all.find(el => el.dataset.key === "message:" + seq)!)
+			.filter(el => el.tag === "path" && el.classList.contains("edge-line"));
+		const hitDs = all.filter(el => el.tag === "path" && el.classList.contains("edge-hit")).map(el => el.getAttribute("d"));
+		const origin = { x: 0, y: 0 };
+
+		const coordSpawns = frame.messages.filter(m => m.tag === "spawn" && m.from === COORD.id);
+		expect(coordSpawns.map(m => m.to).sort()).toEqual(["S1", "S2", "S3"]);
+		expect(waveOf("S3")).not.toEqual(waveOf("S1"));
+		for (const message of coordSpawns) {
+			const paths = lines(message.seq);
+			expect(paths.length).toBe(2);
+			const trunk = paths.find(el => el.classList.contains("edge-trunk"))!;
+			const branch = paths.find(el => !el.classList.contains("edge-trunk"))!;
+			expect(trunk).toBeDefined();
+			expect(branch).toBeDefined();
+			expect(trunk.getAttribute("marker-end")).toBeNull();
+			expect(branch.getAttribute("marker-end")).toBe("url(#arrow)");
+			const wave = waveOf(message.to);
+			const t = ends(trunk.getAttribute("d")!);
+			expect(near(t.start, origin, 40)).toBe(true);
+			expect(near(t.end, wave, 30)).toBe(true);
+			// Trunk runs beside the hub→wave skeleton line, offset 5px along its left normal.
+			const len = Math.hypot(wave.x - origin.x, wave.y - origin.y);
+			const normal = { x: -(wave.y - origin.y) / len, y: (wave.x - origin.x) / len };
+			for (const p of [t.start, t.end]) {
+				expect(Math.abs((p.x - origin.x) * normal.x + (p.y - origin.y) * normal.y - 5)).toBeLessThan(0.5);
+			}
+			const b = ends(branch.getAttribute("d")!);
+			expect(near(b.start, wave, 30)).toBe(true);
+			expect(near(b.end, star(message.to), 22)).toBe(true);
+			expect(hitDs).toContain(branch.getAttribute("d"));
+			expect(hitDs).not.toContain(trunk.getAttribute("d"));
+		}
+
+		const regular = frame.messages.find(m => m.text === "Regular note")!;
+		const subSpawn = frame.messages.find(m => m.text === "Sub spawn")!;
+		for (const [message, from, to] of [[regular, origin, star("S1")], [subSpawn, star("S1"), star("S2")]] as const) {
+			const paths = lines(message.seq);
+			expect(paths.length).toBe(1);
+			expect(paths[0].classList.contains("edge-trunk")).toBe(false);
+			const e = ends(paths[0].getAttribute("d")!);
+			expect(near(e.start, from, 40)).toBe(true);
+			expect(near(e.end, to, 22)).toBe(true);
+		}
+	});
 });

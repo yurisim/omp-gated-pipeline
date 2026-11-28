@@ -403,7 +403,7 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane-halo,
 .member-node:is(:hover, :focus-visible, [aria-pressed="true"]) .member-halo { stroke: var(--accent); stroke-width: 2px; stroke-dasharray: none; }
 .lane-node:focus-visible .lane-halo, .member-node:focus-visible .member-halo { stroke-dasharray: 4 2; }
-:is(.lane-node, .member-node, .message-edge):focus-visible { outline: none; }
+:is(.lane-node, .member-node, .message-edge):is(:focus, :focus-visible) { outline: none; }
 .lane-label, .member-label { fill: var(--fg); font-weight: 650; }
 .lane-label { font-size: 12px; paint-order: stroke fill; stroke: var(--dusk); stroke-width: 4px; stroke-linejoin: round; }
 .member-label { font-size: 11px; }
@@ -412,11 +412,15 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .edge-line { stroke: var(--muted); stroke-width: 2; }
 .edge-hit { stroke: transparent; stroke-width: 24; vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer; }
 .message-edge > .edge-line { pointer-events: stroke; }
+.message-edge > .edge-trunk { pointer-events: none; }
 .edge-spawn .edge-line { stroke-dasharray: 8 5; }
 .edge-peer .edge-line { stroke: color-mix(in oklab, var(--brand-cyan) 65%, var(--muted)); }
 .edge-wait .edge-line { stroke: var(--warn); stroke-dasharray: 2 5; }
 .message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: var(--accent); stroke-width: 4; }
 .message-edge:focus-visible .edge-line { stroke-width: 6; }
+.trunk-highlights { pointer-events: none; }
+.trunk-highlights .edge-line { stroke: var(--accent); stroke-width: 4; }
+.trunk-highlights .edge-line[data-focus-visible="true"] { stroke-width: 6; }
 .mention-list { max-block-size: 15rem; overflow: auto; padding: .25rem; }
 .mention-list button { text-align: start; }
 .lane-detail > * + * { margin-block-start: .45rem; }
@@ -428,9 +432,15 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 .lane-member-last .message { flex: 1; }
 .lane-close { font-size: 1rem; line-height: 1; }
 @media (min-width: 60rem) {
-	.graph-workspace { grid-template-columns: minmax(0, 1fr) 23rem; align-items: start; }
-	.graph-side { position: sticky; top: 3.5rem; max-block-size: calc(100vh - 4.5rem); overflow: auto; }
+	.graph-workspace { grid-template-columns: minmax(0, 1fr) 23rem; grid-template-rows: minmax(0, 1fr); }
+	.graph-side { align-content: start; contain: size; overflow: auto; }
+	body:has(> main > #panel-Graph:not([hidden])) { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-block-size: 100dvh; }
+	main.shell:has(> #panel-Graph:not([hidden])) { display: grid; }
+	#panel-Graph { grid-template-rows: auto minmax(0, 1fr); }
+	.graph-stage { display: grid; grid-template-rows: minmax(24rem, 1fr) auto; }
+	.graph-scroll { block-size: auto; contain: size; }
 }
+main.shell:has(> #panel-Graph:not([hidden])) { max-inline-size: none; margin-inline: 0; }
 @media (max-width: 42rem) {
 	:root { scroll-padding-block-start: 7rem; }
 	.header-bar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "heading status" "tabs tabs"; }
@@ -474,7 +484,8 @@ pre { margin-block: .45rem 0; padding: .55rem; background: var(--dusk); border: 
 	.member-halo[data-working="true"] { stroke: CanvasText; }
 	.lane-node:is(:hover, :focus-visible, [aria-pressed="true"]) .lane-halo,
 	.member-node:is(:hover, :focus-visible, [aria-pressed="true"]) .member-halo,
-	.message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line { stroke: Highlight; }
+	.message-edge:is(:hover, .pointer-hover, :focus-visible, [aria-pressed="true"]) .edge-line,
+	.trunk-highlights .edge-line { stroke: Highlight; }
 }
 </style>
 </head>
@@ -1381,6 +1392,7 @@ function layoutConstellation(frame) {
 	}
 	const ring1 = branches.length ? Math.max(RING_1, branches.length > 1 ? sumFootprint / TAU : 0) : 0;
 	const treeEdges = [];
+	const branchOf = new Map();
 	let start = NORTH;
 	for (const branch of branches) {
 		const n = branch.members.length;
@@ -1401,6 +1413,7 @@ function layoutConstellation(frame) {
 			const angle = branch.angle - SUB_CONE / 2 + (k + .5) * SUB_CONE / n;
 			const x = branch.x + branch.reach * Math.cos(angle), y = branch.y + branch.reach * Math.sin(angle);
 			points.set(branch.members[k].id, { x, y, r: MEMBER_R, depth: 2, angle });
+			branchOf.set(branch.members[k].id, branch);
 			treeEdges.push('M ' + branch.x + ' ' + branch.y + ' L ' + x + ' ' + y);
 		}
 	}
@@ -1414,7 +1427,10 @@ function layoutConstellation(frame) {
 		if (!pair) pairs.set(key, pair = { from: points.get(fromId), to: points.get(toId), count: 0 });
 		return { pair, pairIndex: pair.count++ };
 	}
-	for (const message of frame.messages) routes.set(message.seq, addRoute(message.from, message.to));
+	for (const message of frame.messages) {
+		const wave = message.tag === 'spawn' && message.from === coordinator ? branchOf.get(message.to) : undefined;
+		routes.set(message.seq, wave ? { tree: wave } : addRoute(message.from, message.to));
+	}
 	const waitRoutes = new Map();
 	for (const member of people.values()) {
 		if (member.status === 'waiting' && member.id !== coordinator) waitRoutes.set(member.id, addRoute(member.id, coordinator));
@@ -1447,6 +1463,23 @@ function constellationEdgePath(from, to, pairIndex, pairCount) {
 		return (point.x + vx * scale) + ' ' + (point.y + vy * scale);
 	};
 	return 'M ' + rim(from, 4) + ' Q ' + cx + ' ' + cy + ' ' + rim(to, 6);
+}
+function spawnTreePaths(hub, wave, to) {
+	const dx = wave.x - hub.x, dy = wave.y - hub.y;
+	const dist = Math.hypot(dx, dy);
+	const ux = dx / dist, uy = dy / dist;
+	const hubRim = Math.max(hub.r, HUB_R) + 4;
+	const waveRim = wave.r + 4;
+	// Offset the trunk so a spawn reads as a route beside the skeleton, not a restyled tree edge.
+	const trunk = 'M ' + (hub.x + ux * hubRim - uy * 5) + ' ' + (hub.y + uy * hubRim + ux * 5)
+		+ ' L ' + (wave.x - ux * waveRim - uy * 5) + ' ' + (wave.y - uy * waveRim + ux * 5);
+	const bx = to.x - wave.x, by = to.y - wave.y;
+	const reach = Math.hypot(bx, by);
+	const vx = bx / reach, vy = by / reach;
+	const memberRim = to.r + 6;
+	const branch = 'M ' + (wave.x + vx * waveRim) + ' ' + (wave.y + vy * waveRim)
+		+ ' L ' + (to.x - vx * memberRim) + ' ' + (to.y - vy * memberRim);
+	return { trunk, branch };
 }
 
 let cam = { x: 0, y: 0, zoom: 1, manual: false };
@@ -1591,6 +1624,8 @@ function drawConstellation(frame, layout, messages) {
 	// Put padded hit areas behind all visible strokes so a neighboring edge cannot mask a line.
 	const edgeTargets = svg('g', { 'aria-hidden': 'true' });
 	const arrows = svg('g', {});
+	// Paint active trunks above overlapping arrows without changing the edges' Tab order.
+	const trunkHighlights = svg('g', { class: 'trunk-highlights edge-spawn', 'aria-hidden': 'true' });
 	const nodes = svg('g', {});
 	let focusTarget;
 	for (const lane of lanes) {
@@ -1623,20 +1658,63 @@ function drawConstellation(frame, layout, messages) {
 		regions.append(region);
 	}
 	for (const message of messages) {
-		const { pair: { from, to, count }, pairIndex } = routes.get(message.seq);
-		const path = constellationEdgePath(from, to, pairIndex, count);
+		const route = routes.get(message.seq);
+		let path, trunk;
+		if (route.tree) {
+			const treePaths = spawnTreePaths(points.get(coordinator), route.tree, points.get(message.to));
+			trunk = treePaths.trunk;
+			path = treePaths.branch;
+		} else {
+			const { pair: { from, to, count }, pairIndex } = route;
+			path = constellationEdgePath(from, to, pairIndex, count);
+		}
 		const peer = message.from !== coordinator && message.to !== coordinator && message.from !== message.to && message.tag !== 'spawn';
 		const edgeClass = message.tag === 'spawn' ? ' edge-spawn' : peer ? ' edge-peer' : '';
 		const edge = svg('g', { class: 'message-edge' + edgeClass });
 		const name = messageLabel(message);
+		if (trunk) edge.append(svg('path', { class: 'edge-line edge-trunk', d: trunk }));
 		edge.append(svg('path', { class: 'edge-line', d: path, 'marker-end': peer ? 'url(#arrow-peer)' : 'url(#arrow)' }),
 			svg('title', {}, name));
 		const key = 'message:' + message.seq;
 		const pressed = selection ? selection.kind === 'message' && selection.id === message.seq : message.seq === frame.messages.at(-1)?.seq;
 		graphChoice(edge, key, name, pressed, () => selectGraph('message', message.seq));
+		let updateTrunkHighlight;
+		if (trunk) {
+			const highlight = svg('path', { class: 'edge-line edge-trunk', d: trunk });
+			let hovered = false, focused = false, focusVisible = false;
+			updateTrunkHighlight = () => {
+				highlight.setAttribute('display', pressed || hovered || focused || edge.classList.contains('pointer-hover') ? 'inline' : 'none');
+				highlight.setAttribute('data-focus-visible', String(focusVisible));
+			};
+			edge.addEventListener('pointerenter', () => {
+				hovered = true;
+				updateTrunkHighlight();
+			});
+			edge.addEventListener('pointerleave', () => {
+				hovered = false;
+				updateTrunkHighlight();
+			});
+			edge.addEventListener('focus', () => {
+				focused = true;
+				focusVisible = edge.matches(':focus-visible');
+				updateTrunkHighlight();
+			});
+			edge.addEventListener('blur', () => {
+				focused = focusVisible = false;
+				updateTrunkHighlight();
+			});
+			updateTrunkHighlight();
+			trunkHighlights.append(highlight);
+		}
 		const target = svg('path', { class: 'edge-hit', d: path });
-		target.addEventListener('pointerenter', () => edge.classList.add('pointer-hover'));
-		target.addEventListener('pointerleave', () => edge.classList.remove('pointer-hover'));
+		target.addEventListener('pointerenter', () => {
+			edge.classList.add('pointer-hover');
+			updateTrunkHighlight?.();
+		});
+		target.addEventListener('pointerleave', () => {
+			edge.classList.remove('pointer-hover');
+			updateTrunkHighlight?.();
+		});
 		target.addEventListener('click', () => {
 			edge.focus({ preventScroll: true });
 			selectGraph('message', message.seq);
@@ -1678,7 +1756,7 @@ function drawConstellation(frame, layout, messages) {
 		if (oldKey === key) focusTarget = group;
 		nodes.append(group);
 	}
-	root.replaceChildren(defs, rings, tree, edgeTargets, arrows, regions, nodes);
+	root.replaceChildren(defs, rings, tree, edgeTargets, arrows, trunkHighlights, regions, nodes);
 	if (focusTarget) {
 		// Restoring existing focus on a live redraw must not undo a manual pan.
 		restoringGraphFocus = !requestedKey;
